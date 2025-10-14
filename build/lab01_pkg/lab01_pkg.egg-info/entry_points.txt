@@ -1,0 +1,4 @@
+[console_scripts]
+controller = lab01_pkg.controller:main
+localization = lab01_pkg.localization:main
+
