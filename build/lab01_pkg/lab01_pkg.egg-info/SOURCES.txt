@@ -1,4 +1,3 @@
-LICENSE
 package.xml
 setup.cfg
 setup.py
@@ -15,7 +14,11 @@ lab01_pkg/controller_reset.py
 lab01_pkg/localization.py
 lab01_pkg/localization_reset.py
 lab01_pkg/reset_node.py
+lab01_pkg.egg-info/PKG-INFO
+lab01_pkg.egg-info/SOURCES.txt
+lab01_pkg.egg-info/dependency_links.txt
+lab01_pkg.egg-info/entry_points.txt
+lab01_pkg.egg-info/requires.txt
+lab01_pkg.egg-info/top_level.txt
+lab01_pkg.egg-info/zip-safe
 resource/lab01_pkg
-test/test_copyright.py
-test/test_flake8.py
-test/test_pep257.py

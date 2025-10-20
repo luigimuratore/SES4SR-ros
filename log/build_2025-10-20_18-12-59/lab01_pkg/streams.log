@@ -1,0 +1,23 @@
+[0.598s] Invoking command in '/home/ubuntu-gigi/ses4r_ws/build/lab01_pkg': PYTHONPATH=/home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/build --no-deps symlink_data --force
+[0.892s] running develop
+[1.067s] running egg_info
+[1.067s] writing lab01_pkg.egg-info/PKG-INFO
+[1.067s] writing dependency_links to lab01_pkg.egg-info/dependency_links.txt
+[1.068s] writing entry points to lab01_pkg.egg-info/entry_points.txt
+[1.068s] writing requirements to lab01_pkg.egg-info/requires.txt
+[1.068s] writing top-level names to lab01_pkg.egg-info/top_level.txt
+[1.069s] reading manifest file 'lab01_pkg.egg-info/SOURCES.txt'
+[1.070s] writing manifest file 'lab01_pkg.egg-info/SOURCES.txt'
+[1.071s] running build_ext
+[1.072s] Creating /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/python3.10/site-packages/lab01-pkg.egg-link (link to .)
+[1.072s] Installing controller script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+[1.073s] Installing controller_reset script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+[1.073s] Installing localization script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+[1.073s] Installing localization_reset script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+[1.073s] Installing reset_node script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+[1.073s] 
+[1.074s] Installed /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg
+[1.074s] running symlink_data
+[1.074s] symbolically linking /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/resource/lab01_pkg -> /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/share/ament_index/resource_index/packages
+[1.074s] symbolically linking /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/package.xml -> /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/share/lab01_pkg
+[1.105s] Invoked command in '/home/ubuntu-gigi/ses4r_ws/build/lab01_pkg' returned '0': PYTHONPATH=/home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py develop --editable --build-directory /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/build --no-deps symlink_data --force

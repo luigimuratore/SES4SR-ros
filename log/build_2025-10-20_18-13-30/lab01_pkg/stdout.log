@@ -1,0 +1,19 @@
+running develop
+running egg_info
+writing lab01_pkg.egg-info/PKG-INFO
+writing dependency_links to lab01_pkg.egg-info/dependency_links.txt
+writing entry points to lab01_pkg.egg-info/entry_points.txt
+writing requirements to lab01_pkg.egg-info/requires.txt
+writing top-level names to lab01_pkg.egg-info/top_level.txt
+reading manifest file 'lab01_pkg.egg-info/SOURCES.txt'
+writing manifest file 'lab01_pkg.egg-info/SOURCES.txt'
+running build_ext
+Creating /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/python3.10/site-packages/lab01-pkg.egg-link (link to .)
+Installing controller script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+Installing controller_reset script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+Installing localization script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+Installing localization_reset script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+Installing reset_node script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+
+Installed /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg
+running symlink_data
