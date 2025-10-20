@@ -5,7 +5,7 @@ from geometry_msgs.msg import Twist
 class Controller(Node):
     def __init__(self):
         super().__init__('controller')
-        self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10) # Publisher for velocity commands
         self.timer = self.create_timer(1.0, self.timer_callback)  # 1 Hz
         self.phase = 0
         self.N = 1

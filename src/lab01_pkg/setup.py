@@ -27,7 +27,8 @@ setup(
             'controller = lab01_pkg.controller:main',
             'localization = lab01_pkg.localization:main',
             'reset_node = lab01_pkg.reset_node:main',
-
+            'controller_reset = lab01_pkg.controller_reset:main',
+            'localization_reset = lab01_pkg.localization_reset:main',
         ],
     },
 )

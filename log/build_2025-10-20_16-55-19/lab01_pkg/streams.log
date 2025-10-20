@@ -1,0 +1,27 @@
+[0.540s] Invoking command in '/home/ubuntu-gigi/ses4r_ws/src/lab01_pkg': PYTHONPATH=/home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/lab01_pkg build --build-base /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/build install --record /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/install.log --single-version-externally-managed install_data
+[0.750s] running egg_info
+[0.751s] writing ../../build/lab01_pkg/lab01_pkg.egg-info/PKG-INFO
+[0.751s] writing dependency_links to ../../build/lab01_pkg/lab01_pkg.egg-info/dependency_links.txt
+[0.751s] writing entry points to ../../build/lab01_pkg/lab01_pkg.egg-info/entry_points.txt
+[0.751s] writing requirements to ../../build/lab01_pkg/lab01_pkg.egg-info/requires.txt
+[0.751s] writing top-level names to ../../build/lab01_pkg/lab01_pkg.egg-info/top_level.txt
+[0.753s] reading manifest file '../../build/lab01_pkg/lab01_pkg.egg-info/SOURCES.txt'
+[0.753s] adding license file 'LICENSE'
+[0.753s] writing manifest file '../../build/lab01_pkg/lab01_pkg.egg-info/SOURCES.txt'
+[0.753s] running build
+[0.753s] running build_py
+[0.754s] copying lab01_pkg/reset_node.py -> /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/build/lib/lab01_pkg
+[0.754s] running install
+[0.754s] running install_lib
+[0.755s] copying /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/build/lib/lab01_pkg/reset_node.py -> /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/python3.10/site-packages/lab01_pkg
+[0.755s] byte-compiling /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/python3.10/site-packages/lab01_pkg/reset_node.py to reset_node.cpython-310.pyc
+[0.756s] running install_data
+[0.756s] running install_egg_info
+[0.758s] removing '/home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/python3.10/site-packages/lab01_pkg-0.0.0-py3.10.egg-info' (and everything under it)
+[0.758s] Copying ../../build/lab01_pkg/lab01_pkg.egg-info to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/python3.10/site-packages/lab01_pkg-0.0.0-py3.10.egg-info
+[0.759s] running install_scripts
+[0.776s] Installing controller script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+[0.776s] Installing localization script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+[0.776s] Installing reset_node script to /home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/lab01_pkg
+[0.777s] writing list of installed files to '/home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/install.log'
+[0.799s] Invoked command in '/home/ubuntu-gigi/ses4r_ws/src/lab01_pkg' returned '0': PYTHONPATH=/home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/ubuntu-gigi/ses4r_ws/install/lab01_pkg/lib/python3.10/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base ../../build/lab01_pkg build --build-base /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/build install --record /home/ubuntu-gigi/ses4r_ws/build/lab01_pkg/install.log --single-version-externally-managed install_data

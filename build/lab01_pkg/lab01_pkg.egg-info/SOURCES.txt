@@ -11,7 +11,10 @@ setup.py
 ../../build/lab01_pkg/lab01_pkg.egg-info/zip-safe
 lab01_pkg/__init__.py
 lab01_pkg/controller.py
+lab01_pkg/controller_reset.py
 lab01_pkg/localization.py
+lab01_pkg/localization_reset.py
+lab01_pkg/reset_node.py
 resource/lab01_pkg
 test/test_copyright.py
 test/test_flake8.py
