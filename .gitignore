@@ -1,0 +1,4 @@
+# Ignore ROS build, install, and log directories
+build/
+install/
+log/
