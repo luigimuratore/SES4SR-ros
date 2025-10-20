@@ -1,1 +1,0 @@
-/home/ubuntu-gigi/ses4r_ws/src/turtlebot3_simulations/turtlebot3_gazebo/launch/lab02.launch.py

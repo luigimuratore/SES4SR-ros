@@ -1,1 +1,0 @@
-/home/ubuntu-gigi/ses4r_ws/src/lab01_pkg/setup.py
