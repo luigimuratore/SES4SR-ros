@@ -1,0 +1,5 @@
+controller:
+  ros_parameters:
+    linear_speed: 0.22
+    max_turn_rate: 1.5
+    is_active: true
