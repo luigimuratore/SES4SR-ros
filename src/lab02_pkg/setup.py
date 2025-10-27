@@ -1,4 +1,6 @@
 from setuptools import find_packages, setup
+import os           # <--- ADD THIS
+from glob import glob # <--- ADD THIS
 
 package_name = 'lab02_pkg'
 
@@ -10,6 +12,8 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        # --- ADD THIS LINE ---
+        (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*.py'))),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
