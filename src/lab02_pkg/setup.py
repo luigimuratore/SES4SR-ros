@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
-import os           # <--- ADD THIS
-from glob import glob # <--- ADD THIS
+import os           
+from glob import glob 
 
 package_name = 'lab02_pkg'
 
@@ -9,11 +9,9 @@ setup(
     version='0.0.0',
     packages=find_packages(exclude=['test']),
     data_files=[
-        ('share/ament_index/resource_index/packages',
-            ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml']),
-        # --- ADD THIS LINE ---
-        (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*.py'))),
+        ('share/ament_index/resource_index/packages',['resource/' + package_name]),         # Install ament resource index marker for package discovery
+        ('share/' + package_name, ['package.xml']),         # Install package.xml metadata file
+        (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*.py'))), # Install all Python launch files from the local launch/ directory
     ],
     install_requires=['setuptools'],
     zip_safe=True,

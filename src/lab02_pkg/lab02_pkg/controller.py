@@ -11,7 +11,7 @@ class Controller(Node):
         super().__init__('controller')
         self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
 
-        # declare and read parameters
+        # declare parameters
         self.declare_parameter('max_speed', 0.22)
         self.declare_parameter('max_turn_rate', 1.5)
         self.declare_parameter('is_active', True)
@@ -29,7 +29,7 @@ class Controller(Node):
         # store latest closest obstacle info
         self.closest_range_front = float('inf')
 
-        # state for wall-avoidance: FORWARD or TURN
+        # avoid wall: FORWARD or TURN
         self.state = 'FORWARD'
         self.yaw = None
         self.turn_target_yaw = None
@@ -38,46 +38,40 @@ class Controller(Node):
         self.post_turn_deadline = 0.0
 
 
+
     def odom_callback(self, msg):
-        # Use tf_transformations for reliable quaternion to yaw conversion
-        q = msg.pose.pose.orientation
+        q = msg.pose.pose.orientation         # Use tf_transformations 
         quat_list = [q.x, q.y, q.z, q.w]
-        # Roll, Pitch, Yaw are returned in that order (we only want yaw)
-        _, _, self.yaw = tf_transformations.euler_from_quaternion(quat_list)
+        _, _, self.yaw = tf_transformations.euler_from_quaternion(quat_list)         # Roll, Pitch, Yaw -> we only take yaw
+
+
 
     def scan_callback(self, msg):
         
-        # 1. Check only the front sector for obstacles (e.g., +/- 15 degrees)
-        # Assuming 360 points, index 0 is forward.
+        # 1 Check only the front sector for obstacles -> LiDar -> assuming 360 points, index 0 is forward.
         front_sector = msg.ranges[:16] + msg.ranges[345:] # Indices 0-15 and 345-359
         
-        # Filter out invalid values (inf, nan, and below min range)
-        valid_ranges = [r for r in front_sector if math.isfinite(r) and r > msg.range_min]
+        valid_ranges = [r for r in front_sector if math.isfinite(r) and r > msg.range_min]  # exclude invalid values (inf, nan, and below min range)
         
         self.closest_range_front = min(valid_ranges) if valid_ranges else float('inf')
         
-        # enforce a post-turn waiting period to drive forward before allowing a new turn
-        # FIX for to_sec: Use nanoseconds
+        # enforce a waiting period to drive forward before allowing a new turn
         now = self.get_clock().now().nanoseconds / 1e9
         if now < self.post_turn_deadline:
             return
             
-        # 2. Transition to TURN state if an obstacle is detected while FORWARD
+
+        # 2 TURN if an obstacle is detected while FORWARD
         if self.state == 'FORWARD' and self.closest_range_front < self.obstacle_threshold:
             if self.yaw is None:
                 self.get_logger().info('Obstacle detected but no odom yet — stopping')
                 self.publisher_.publish(Twist())
                 return
             
-            # --- Implementation of the new 90-degree turn logic ---
-            # Determine the clearest side for a 90-degree turn
-            turn_direction = self._determine_clearest_side(msg.ranges)
+            turn_direction = self._determine_clearest_side(msg.ranges)    # Determine the clearest side for a 90-degree turn
             
-            # Calculate the nominal 90-degree turn
-            nominal_target = self.yaw + (math.pi / 2.0 * turn_direction) 
-            
-            # FIX: Snap the nominal target to the nearest cardinal direction to eliminate drift
-            self.turn_target_yaw = self._snap_to_cardinal_yaw(nominal_target)
+            nominal_target = self.yaw + (math.pi / 2.0 * turn_direction)     # Calculate the nominal 90-degree turn
+            self.turn_target_yaw = self._snap_to_cardinal_yaw(nominal_target) # avoid drift by snapping to cardinal directions
 
             self.state = 'TURN'
             
@@ -86,51 +80,42 @@ class Controller(Node):
                 f'Triggering TURN: Front closest={self.closest_range_front:.2f}m. Turning {direction_str} to target_yaw={self.turn_target_yaw:.2f} rad'
             )
             
+
+
     def _determine_clearest_side(self, ranges):
-        # 90-degree sector Left (approx 45 to 135 degrees)
-        left_ranges = ranges[45:136]
-        # 90-degree sector Right (approx 225 to 315 degrees)
-        right_ranges = ranges[225:316]
+        left_ranges = ranges[45:136]         # 90-degree sector Left (approx 45 to 135 degrees)
+        right_ranges = ranges[225:316]         # 90-degree sector Right (approx 225 to 315 degrees)
         
-        # Get the max range value (3.5 m)
-        MAX_RANGE = 3.5
+        MAX_RANGE = 3.5         # Get the max range value (3.5 m)
 
         def get_valid_ranges(r_list):
-            # Substitutes 'inf' values with MAX_RANGE (3.5 m). 
-            # This ensures max clearance contributes to the average.
-            return [MAX_RANGE if math.isinf(r) else r for r in r_list if math.isfinite(r) or math.isinf(r)]
-            
+            return [MAX_RANGE if math.isinf(r) else r for r in r_list if math.isfinite(r) or math.isinf(r)]   # MAX_RANGE if inf 
+             
         def get_avg(r_list):
             valid_list = get_valid_ranges(r_list)
             
             if not valid_list:
                 return 0.0
                 
-            # Calculate average based on the length of the original sector (91 elements)
-            return sum(valid_list) / len(r_list)
+            return sum(valid_list) / len(r_list)             # Calculate average based on the length of the original sector (91 elements)
 
         left_avg = get_avg(left_ranges)
         right_avg = get_avg(right_ranges)
         
-        # Return +1 for Left, -1 for Right
-        return 1 if left_avg >= right_avg else -1
+        return 1 if left_avg >= right_avg else -1  # 1 for left, -1 for right
     
+
+
     def _snap_to_cardinal_yaw(self, yaw):
-        """Snaps the yaw angle to the nearest cardinal direction (0, pi/2, pi, -pi/2)."""
         
-        # Normalize to [-pi, pi] first
-        normalized_yaw = self._normalize_angle(yaw)
+        normalized_yaw = self._normalize_angle(yaw)         # Normalize to [-pi, pi] first
+        step = math.pi / 2.0         # Cardinal directions are multiples of pi/2 (~1.5708 rad)
         
-        # Cardinal directions are multiples of pi/2 (~1.5708 rad)
-        step = math.pi / 2.0
-        
-        # Calculate how many steps (N) of pi/2 away we are from 0
-        N = round(normalized_yaw / step)
-        
-        # Snap the yaw to the nearest multiple of step
-        snapped_yaw = N * step
-        
+        N = round(normalized_yaw / step)         # Calculate steps (N) of pi/2 away we are from 0
+        snapped_yaw = N * step         # Snap the yaw to the nearest multiple of step
+
         return self._normalize_angle(snapped_yaw)
+
 
 
     def timer_callback(self):
@@ -139,9 +124,8 @@ class Controller(Node):
             self.publisher_.publish(msg)
             return
 
-        if self.state == 'FORWARD':
-            # Drive straight until obstacle is detected
-            msg.linear.x = float(self.max_speed)
+        if self.state == 'FORWARD':             # Drive straight until obstacle is detected
+            msg.linear.x = float(self.max_speed) 
             msg.angular.z = 0.0
 
         elif self.state == 'TURN':
@@ -149,25 +133,20 @@ class Controller(Node):
                 msg.linear.x = 0.0
                 msg.angular.z = 0.0
             else:
-                # Compute shortest angular difference
-                diff = self._shortest_angular_dist(self.yaw, self.turn_target_yaw)
-                # Proportional control (P-gain = 2.0)
-                ang = max(-float(self.max_turn_rate), min(float(self.max_turn_rate), 2.0 * diff))
+                diff = self._shortest_angular_dist(self.yaw, self.turn_target_yaw)                 # Compute shortest angular difference
+                ang = max(-float(self.max_turn_rate), min(float(self.max_turn_rate), 2.0 * diff))                 # Proportional control (P-gain = 2.0)
                 
-                # If within tolerance, finish turn and resume forward
-                if abs(diff) < self.turn_tolerance:
+                if abs(diff) < self.turn_tolerance:                 # If within tolerance, finish turn and resume forward
                     self.state = 'FORWARD'
                     self.turn_target_yaw = None
                     
-                    # FIX for to_sec: Use nanoseconds
                     now = self.get_clock().now().nanoseconds / 1e9
                     self.post_turn_deadline = now + 0.5
                     
                     msg.linear.x = float(self.max_speed)
                     msg.angular.z = 0.0
                     self.get_logger().info('Turn complete, starting FORWARD movement.')
-                else:
-                    # Continue rotation
+                else:                     # Continue rotation
                     msg.linear.x = 0.0
                     msg.angular.z = ang
         else:
@@ -177,12 +156,17 @@ class Controller(Node):
         self.publisher_.publish(msg)
         self.get_logger().debug(f'Controller state={self.state}, cmd linear.x={msg.linear.x:.2f}, angular.z={msg.angular.z:.2f}')
 
+
+    
     def groundtruth_callback(self, msg):
         pass    
 
-    # helper math
+
+
     def _normalize_angle(self, a):
         return math.atan2(math.sin(a), math.cos(a))
+
+
 
     def _shortest_angular_dist(self, from_angle, to_angle):
         diff = self._normalize_angle(to_angle - from_angle)
