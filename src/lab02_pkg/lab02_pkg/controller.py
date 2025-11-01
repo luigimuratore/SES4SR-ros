@@ -28,23 +28,33 @@ class Controller(Node):
 
         # store latest closest obstacle info
         self.closest_range_front = float('inf')
-
+        
+        # Add timestamp tracking for odometry
+        self.last_odom_time = None
+        self.odom_timeout = 0.5  # seconds
+        
         # avoid wall: FORWARD or TURN
         self.state = 'FORWARD'
         self.yaw = None
         self.turn_target_yaw = None
         self.obstacle_threshold = 0.5
-        self.turn_tolerance = 0.04
+        self.turn_tolerance = 0.1  # Increase tolerance for real robot
         self.post_turn_deadline = 0.0
 
 
 
     def odom_callback(self, msg):
-        q = msg.pose.pose.orientation         # Use tf_transformations 
+        q = msg.pose.pose.orientation
         quat_list = [q.x, q.y, q.z, q.w]
-        _, _, self.yaw = tf_transformations.euler_from_quaternion(quat_list)         # Roll, Pitch, Yaw -> we only take yaw
-
-
+        _, _, self.yaw = tf_transformations.euler_from_quaternion(quat_list)
+        
+        # Track when we last received odometry
+        self.last_odom_time = self.get_clock().now()
+        
+        # Log yaw during turns for debugging
+        if self.state == 'TURN' and self.turn_target_yaw is not None:
+            diff = self._shortest_angular_dist(self.yaw, self.turn_target_yaw)
+            self.get_logger().debug(f'TURN: current_yaw={self.yaw:.2f}, target={self.turn_target_yaw:.2f}, diff={diff:.2f}')
 
     def scan_callback(self, msg):
         
@@ -123,6 +133,19 @@ class Controller(Node):
         if not self.is_active:
             self.publisher_.publish(msg)
             return
+        
+        # Check if odometry is fresh
+        now = self.get_clock().now()
+        if self.last_odom_time is None:
+            self.get_logger().warn('No odometry received yet, stopping')
+            self.publisher_.publish(msg)
+            return
+            
+        odom_age = (now - self.last_odom_time).nanoseconds / 1e9
+        if odom_age > self.odom_timeout:
+            self.get_logger().warn(f'Odometry stale ({odom_age:.2f}s), stopping')
+            self.publisher_.publish(msg)
+            return
 
         if self.state == 'FORWARD':             # Drive straight until obstacle is detected
             msg.linear.x = float(self.max_speed) 
@@ -133,22 +156,23 @@ class Controller(Node):
                 msg.linear.x = 0.0
                 msg.angular.z = 0.0
             else:
-                diff = self._shortest_angular_dist(self.yaw, self.turn_target_yaw)                 # Compute shortest angular difference
-                ang = max(-float(self.max_turn_rate), min(float(self.max_turn_rate), 2.0 * diff))                 # Proportional control (P-gain = 2.0)
+                diff = self._shortest_angular_dist(self.yaw, self.turn_target_yaw)
+                ang = max(-float(self.max_turn_rate), min(float(self.max_turn_rate), 2.0 * diff))
                 
-                if abs(diff) < self.turn_tolerance:                 # If within tolerance, finish turn and resume forward
+                if abs(diff) < self.turn_tolerance:
                     self.state = 'FORWARD'
                     self.turn_target_yaw = None
                     
-                    now = self.get_clock().now().nanoseconds / 1e9
-                    self.post_turn_deadline = now + 0.5
+                    now_sec = self.get_clock().now().nanoseconds / 1e9
+                    self.post_turn_deadline = now_sec + 0.5
                     
                     msg.linear.x = float(self.max_speed)
                     msg.angular.z = 0.0
-                    self.get_logger().info('Turn complete, starting FORWARD movement.')
-                else:                     # Continue rotation
+                    self.get_logger().info(f'Turn complete at yaw={self.yaw:.2f}, starting FORWARD')
+                else:
                     msg.linear.x = 0.0
                     msg.angular.z = ang
+                    self.get_logger().info(f'Turning: diff={diff:.2f} rad, angular.z={ang:.2f}')
         else:
             msg.linear.x = 0.0
             msg.angular.z = 0.0
