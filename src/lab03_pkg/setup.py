@@ -1,8 +1,8 @@
 from setuptools import find_packages, setup
-import os           # <--- ADD THIS
-from glob import glob # <--- ADD THIS
+import os           
+from glob import glob 
 
-package_name = 'lab02_pkg'
+package_name = 'lab03_pkg'
 
 setup(
     name=package_name,
@@ -12,7 +12,6 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        # --- ADD THIS LINE ---
         (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*.py'))),
     ],
     install_requires=['setuptools'],
@@ -28,7 +27,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'controller = lab02_pkg.controller:main',
+            'controller = lab03_pkg.controller:main',
         ],
     },
 )
