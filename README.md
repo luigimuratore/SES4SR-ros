@@ -21,6 +21,15 @@ This repo contains all the material and explanation of the laboratories of the c
 ## ROVER 
 - [Rover](./src/rover/README.md) — Rover robot
 
+<table>
+  <tr><th>Real</th><th>Gazebo</th></tr>
+  <tr>
+    <td><img src="./src/rover/media/real.jpg" alt="real" style="width:420px;"></td>
+    <td><img src="./src/rover/media/rover.png" alt="rover" style="width:550px;"></td>
+  </tr>
+</table>
+
+
 ---
 
 
