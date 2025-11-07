@@ -1,3 +1,7 @@
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Contributors](https://img.shields.io/github/contributors/luigimuratore/SES4SR-ros)](https://github.com/luigimuratore/SES4SR-ros/graphs/contributors)
+
+
 # SES4SR-ros 🤖
 
 ## Sensors, embedded systems and algorithms for Service Robotics 
