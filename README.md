@@ -14,6 +14,9 @@ This repo contains all the material and explanation of the laboratories of the c
 
 ---
 
+## ROVER 
+- [Rover](./src/rover/README.md) — Rover robot
+
 📌 Each packgae contains:
 - Code
 - Plots
