@@ -23,22 +23,20 @@ class Controller(Node):
 
         self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
-        self.groundtruth_sub = self.create_subscription(Odometry, '/ground_truth', self.groundtruth_callback, 10)
         self.timer = self.create_timer(0.1, self.timer_callback)
 
-        # store latest closest obstacle info
-        self.closest_range_front = float('inf')
+        self.closest_range_front = float('inf')         # store latest closest obstacle info
         
         # Add timestamp tracking for odometry
         self.last_odom_time = None
-        self.odom_timeout = 0.5  # seconds
+        self.odom_timeout = 0.5  # 0.5 seconds
         
         # avoid wall: FORWARD or TURN
         self.state = 'FORWARD'
         self.yaw = None
         self.turn_target_yaw = None
         self.obstacle_threshold = 0.3
-        self.turn_tolerance = 0.1  # Increase tolerance for real robot
+        self.turn_tolerance = 0.1  # tolerance for turning
         self.post_turn_deadline = 0.0
 
 
@@ -47,9 +45,7 @@ class Controller(Node):
         q = msg.pose.pose.orientation
         quat_list = [q.x, q.y, q.z, q.w]
         _, _, self.yaw = tf_transformations.euler_from_quaternion(quat_list)
-        
-        # Track when we last received odometry
-        self.last_odom_time = self.get_clock().now()
+        self.last_odom_time = self.get_clock().now()         # Track when last received odometry to avoid going stal
         
         # Log yaw during turns for debugging
         if self.state == 'TURN' and self.turn_target_yaw is not None:
@@ -60,12 +56,10 @@ class Controller(Node):
         
         # 1 Check only the front sector for obstacles -> LiDar -> assuming 360 points, index 0 is forward.
         front_sector = msg.ranges[:16] + msg.ranges[345:] # Indices 0-15 and 345-359
-        
         valid_ranges = [r for r in front_sector if math.isfinite(r) and r > msg.range_min]  # exclude invalid values (inf, nan, and below min range)
-        
         self.closest_range_front = min(valid_ranges) if valid_ranges else float('inf')
         
-        # enforce a waiting period to drive forward before allowing a new turn
+        # waiting period to drive forward before allowing a new turn
         now = self.get_clock().now().nanoseconds / 1e9
         if now < self.post_turn_deadline:
             return
@@ -79,7 +73,6 @@ class Controller(Node):
                 return
             
             turn_direction = self._determine_clearest_side(msg.ranges)    # Determine the clearest side for a 90-degree turn
-            
             nominal_target = self.yaw + (math.pi / 2.0 * turn_direction)     # Calculate the nominal 90-degree turn
             self.turn_target_yaw = self._snap_to_cardinal_yaw(nominal_target) # avoid drift by snapping to cardinal directions
 
@@ -95,7 +88,6 @@ class Controller(Node):
     def _determine_clearest_side(self, ranges):
         left_ranges = ranges[45:136]         # 90-degree sector Left (approx 45 to 135 degrees)
         right_ranges = ranges[225:316]         # 90-degree sector Right (approx 225 to 315 degrees)
-        
         MAX_RANGE = 3.5         # Get the max range value (3.5 m)
 
         def get_valid_ranges(r_list):
@@ -179,11 +171,6 @@ class Controller(Node):
 
         self.publisher_.publish(msg)
         self.get_logger().debug(f'Controller state={self.state}, cmd linear.x={msg.linear.x:.2f}, angular.z={msg.angular.z:.2f}')
-
-
-    
-    def groundtruth_callback(self, msg):
-        pass    
 
 
 
