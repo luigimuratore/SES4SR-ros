@@ -14,10 +14,12 @@ class Controller(Node):
         # declare parameters
         self.declare_parameter('max_speed', 0.15)
         self.declare_parameter('max_turn_rate', 1.5)
+        self.declare_parameter('obstacle_threshold', 0.3)
         self.declare_parameter('is_active', True)
 
         self.max_speed = self.get_parameter('max_speed').value
         self.max_turn_rate = self.get_parameter('max_turn_rate').value
+        self.obstacle_threshold = self.get_parameter('obstacle_threshold').value
         self.is_active = self.get_parameter('is_active').value
         self.get_logger().info(f'Parameters loaded: max_speed={self.max_speed}, max_turn_rate={self.max_turn_rate}, is_active={self.is_active}')
 
@@ -35,7 +37,6 @@ class Controller(Node):
         self.state = 'FORWARD'
         self.yaw = None
         self.turn_target_yaw = None
-        self.obstacle_threshold = 0.3
         self.turn_tolerance = 0.1  # tolerance for turning
         self.post_turn_deadline = 0.0
 
