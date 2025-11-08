@@ -15,6 +15,17 @@ def generate_launch_description():
         ])] 
     )
 
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        arguments=['-d', PathJoinSubstitution([
+            FindPackageShare('lab03_pkg'), 'config', 'lab03_rviz_config.rviz'
+        ])],
+        output='screen'
+    )
+
     return LaunchDescription([
-        controller_node       # launch controller node
+        controller_node,      # launch controller node with params
+        rviz_node            # launch rviz with config
     ])
