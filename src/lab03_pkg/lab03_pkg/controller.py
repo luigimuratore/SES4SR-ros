@@ -12,9 +12,9 @@ class Controller(Node):
         self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
 
         # declare parameters
-        self.declare_parameter('max_speed', 0.15)
-        self.declare_parameter('max_turn_rate', 1.5)
-        self.declare_parameter('obstacle_threshold', 0.3)
+        self.declare_parameter('max_speed', 0.12)
+        self.declare_parameter('max_turn_rate', 1.2)
+        self.declare_parameter('obstacle_threshold', 0.2)
         self.declare_parameter('is_active', True)
 
         self.max_speed = self.get_parameter('max_speed').value
