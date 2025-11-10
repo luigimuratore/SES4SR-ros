@@ -87,7 +87,8 @@ bool SerialInterfaceLinux::Open(std::string &port_name, uint32_t com_baudrate) {
     return false;
   }
 
-  LDS_LOG_INFO("Actual BaudRate reported:%d", options.c_ospeed);
+  // options.c_ospeed has type speed_t; cast to unsigned long and use %lu to avoid negative outputs
+  LDS_LOG_INFO("Actual BaudRate reported:%lu", (unsigned long)options.c_ospeed);
 
   tcflush(com_handle_, TCIFLUSH);
 
