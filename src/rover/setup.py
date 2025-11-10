@@ -13,18 +13,20 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
-        (os.path.join('share', package_name, 'urdf'), glob('urdf/*.xacro')),
-        (os.path.join('share', package_name, 'config'), glob('config/*.rviz')),
+        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
 
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='your_name',
-    maintainer_email='your_email@example.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    maintainer='gigi',
+    maintainer_email='your@email.com',
+    description='Rover control package',
+    license='Apache License 2.0',
     tests_require=['pytest'],
     entry_points={
-        'console_scripts': [],
+        'console_scripts': [
+            'controller = rover.controller:main',
+            'arduino_bridge = rover.arduino_bridge:main',
+        ],
     },
 )
