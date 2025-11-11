@@ -10,12 +10,12 @@ This repo contains all the material and explanation of the laboratories of the c
 
 ## 📚 Index of laboratories
 
-| Laboratory | Description | Preview |
-| --- | ----------- | ------- |
-| [Lab 01](./src/lab01_pkg/lab01_pkg/README.md) | Understanding ROS 2: basic tools, topics, nodes | <img src="./src/lab01_pkg/lab01_pkg/media/image 6.png" alt="Lab01" width="400"> |
-| [Lab 02](./src/lab02_pkg/lab02_pkg/README.md) | Simulation in Gazebo and visualization with Rviz2 | <img src="./src/lab02_pkg/lab02_pkg/media/image.png" alt="Lab02" width="400"> |
-| [Lab 03](./src/lab03_pkg/lab03_pkg/README.md) | Bringup and control a real robot <br> [Report](./src/lab03_pkg/114_Report01.pdf) | <img src="./src/lab03_pkg/media/map.jpeg" alt="Lab03" width="350"> |
-| [Lab 04](./src/lab04_pkg/lab04_pkg/README.md) | Localization with EKF | <img src="./src/lab04_pkg/lab04_pkg/media/preview.png" alt="Lab04" width="160"> |
+| Laboratory | Description | Preview | Docs |
+| --- | ----------- | ------- | ---- |
+| [Lab 01](./src/lab01_pkg/lab01_pkg/README.md) | Understanding ROS 2: basic tools, topics, nodes | <img src="./src/lab01_pkg/lab01_pkg/media/image 6.png" alt="Lab01" width="400"> |  |
+| [Lab 02](./src/lab02_pkg/lab02_pkg/README.md) | Simulation in Gazebo and visualization with Rviz2 | <img src="./src/lab02_pkg/lab02_pkg/media/image.png" alt="Lab02" width="400"> |  |
+| [Lab 03](./src/lab03_pkg/lab03_pkg/README.md) | Bringup and control a real robot | <img src="./src/lab03_pkg/media/map.jpeg" alt="Lab03" width="350"> | [Report](./src/lab03_pkg/114_Report01.pdf) |
+| [Lab 04](./src/lab04_pkg/lab04_pkg/README.md) | Localization with EKF | <img src="./src/lab04_pkg/lab04_pkg/media/preview.png" alt="Lab04" width="160"> |  |
 
 
 ---
