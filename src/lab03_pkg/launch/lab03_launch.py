@@ -7,7 +7,6 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     controller_node = Node(
         package='lab03_pkg',
-        namespace='controller1',
         executable='controller',
         name='controller',
         parameters=[PathJoinSubstitution([
