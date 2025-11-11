@@ -79,6 +79,13 @@ def main():
     #a = [0.001, 0.01, 0.1, 0.2, 0.05, 0.05] # noise hilghitngs for rotational
     a = [0.12, 0, 0, 0, 0, 0] # noise hilghitngs for translational
 
+    # a[1]: noise related to translational velocity variance due to translational velocity
+    # a[2]: noise related to translational velocity variance due to rotational velocity 
+    # a[3]: noise related to rotational velocity variance due to translational velocity
+    # a[4]: noise related to rotational velocity variance due to rotational velocity
+    # a[5]: noise related to drift (pose) variance due to translational velocity
+    # a[6]: noise related to drift variance due to rotational velocity
+
     x_prime = np.zeros([n_samples, 3]) # It gives back a n*3 matrix, 3 because we want x, y, theta
     for i in range(n_samples):
         x_prime[i,:] = sample_velocity_motion_model(x, u, a, dt)
@@ -86,8 +93,6 @@ def main():
     print(x_prime)
 
     compute_jacobians(x, u, dt)
-
-
 
 
     ###################################
