@@ -1,5 +1,5 @@
 controller:
-  ros_parameters:
+  ros__parameters:
     max_speed: 0.15
     max_turn_rate: 1.5
     obstacle_threshold: 0.3
