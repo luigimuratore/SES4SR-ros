@@ -38,19 +38,37 @@ def sample_velocity_motion_model(x, u, a, dt):
     return np.array([x_prime, y_prime, theta_prime])
 
 
-def compute_jacobians(x,y):
-    x[0], x[1], x[2], u[0], u[1], dt = symbols('x y theta v w dt')
-    beta = x[2] + w * dt
-    R = v/w
-    gux = Matrix(
-    [
-        [x[0] - R * sympy.sin(x[2]) + R * sympy.sin(beta)],
-        [x[1] + R * sympy.cos(x[2]) - R * sympy.cos(beta)],
+def compute_jacobians(x, u, dt):
+    # Use fresh sympy symbols (do not mutate input lists)
+    x_s, y_s, theta_s, v_s, w_s, dt_s = symbols('x y theta v w dt')
+    beta = theta_s + w_s * dt_s
+    R = v_s / w_s
+
+    gux = Matrix([
+        [x_s - R * sympy.sin(theta_s) + R * sympy.sin(beta)],
+        [y_s + R * sympy.cos(theta_s) - R * sympy.cos(beta)],
         [beta],
-    ]
-)
-    eval_gux = sympy.lambdify((x[0], x[1], x[2], v, w, dt), gux, 'numpy')
-    return (eval_gux) 
+    ])
+
+    # lambdify evaluators (return numeric callable functions)
+    eval_gux = sympy.lambdify((x_s, y_s, theta_s, v_s, w_s, dt_s), gux, 'numpy')
+    Gt = gux.jacobian(Matrix([x_s, y_s, theta_s]))
+    eval_Gt = sympy.lambdify((x_s, y_s, theta_s, v_s, w_s, dt_s), Gt, 'numpy')
+    Vt = gux.jacobian(Matrix([v_s, w_s]))
+    eval_Vt = sympy.lambdify((x_s, y_s, theta_s, v_s, w_s, dt_s), Vt, 'numpy')
+
+    print("Jacobian w.r.t state Gt:")
+    sympy.pprint(Gt)
+    print("\nJacobian w.r.t control Vt:")
+    sympy.pprint(Vt)
+
+    print("\nEvaluated Gt at x={}, u={}, dt={}:".format(x, u, dt))
+    print(eval_Gt(x[0], x[1], x[2], u[0], u[1], dt))
+
+    print("\nEvaluated Vt at x={}, u={}, dt={}:".format(x, u, dt))
+    print(eval_Vt(x[0], x[1], x[2], u[0], u[1], dt))
+
+    return (eval_gux, eval_Gt, eval_Vt, Gt, Vt) 
 
 def main():
     n_samples = 500
@@ -58,11 +76,18 @@ def main():
 
     x = [2, 4, 0]
     u = [0.8, 0.6]
-    a = [0.001, 0.01, 0.1, 0.2, 0.05, 0.05] # noise variance
+    #a = [0.001, 0.01, 0.1, 0.2, 0.05, 0.05] # noise hilghitngs for rotational
+    a = [0.12, 0, 0, 0, 0, 0] # noise hilghitngs for translational
 
     x_prime = np.zeros([n_samples, 3]) # It gives back a n*3 matrix, 3 because we want x, y, theta
     for i in range(n_samples):
         x_prime[i,:] = sample_velocity_motion_model(x, u, a, dt)
+    
+    print(x_prime)
+
+    compute_jacobians(x, u, dt)
+
+
 
 
     ###################################
