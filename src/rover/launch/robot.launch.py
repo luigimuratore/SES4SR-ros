@@ -12,19 +12,11 @@ def generate_launch_description():
     )
     
     return LaunchDescription([
-        # Include LiDAR launch file
+        # Include LiDAR launch file (includes base_link -> laser transform)
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(ld19_launch_dir, 'lidar.launch.py')
             )
-        ),
-        
-        # Static transform: base_link -> laser
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            name='base_to_laser_tf',
-            arguments=['0', '0', '0.1', '0', '0', '0', 'base_link', 'laser']
         ),
         
         # Arduino bridge
@@ -33,22 +25,35 @@ def generate_launch_description():
             executable='arduino_bridge',
             name='arduino_bridge',
             parameters=[{
-                'port': '/dev/ttyUSB0',
+                'serial_port': '/dev/ttyUSB0',
                 'baud_rate': 115200
             }],
             output='screen'
         ),
         
-        # Controller (INACTIVE for manual testing)
+        # Odometry publisher
+        Node(
+            package='rover',
+            executable='odometry_publisher',
+            name='odometry_publisher',
+            parameters=[{
+                'wheel_radius': 0.065,      # meters (adjust to your wheel size)
+                'wheel_base': 0.30,         # meters (distance between left/right wheels)
+                'ticks_per_rev': 1600       # encoder ticks per wheel revolution (adjust based on your encoder)
+            }],
+            output='screen'
+        ),
+        
+        # Controller (INACTIVE by default for safety)
         Node(
             package='rover',
             executable='controller',
             name='controller',
             parameters=[{
                 'max_speed': 0.20,
-                'max_turn_rate': 1.5,
-                'is_active': False,  # Inactive - won't send commands
-                'use_odometry': False
+                'max_turn_rate': 1.0,
+                'obstacle_threshold': 0.3,
+                'is_active': True  # Set to True when ready to run autonomous navigation
             }],
             output='screen'
         ),

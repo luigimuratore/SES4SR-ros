@@ -91,8 +91,8 @@ auto LD19Node::populate_message(const std::vector<PointData> & laser_data)->void
     }
 
     // int index = (int)((angle - output_.angle_min) / output_.angle_increment);
-    std::cout << "max index:" << max_index << std::endl;
-    std::cout << "deg: " << point.angle << " rads: " << angle << " index: " << index << std::endl;
+    //std::cout << "max index:" << max_index << std::endl;
+    //std::cout << "deg: " << point.angle << " rads: " << angle << " index: " << index << std::endl;
     if (index >= 0 && index < max_index) {
       output_.ranges[index] = range;
       /*If the current content is Nan, it is assigned directly*/

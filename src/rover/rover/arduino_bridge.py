@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
+from std_msgs.msg import String
 import serial
 import time
 
@@ -8,111 +9,70 @@ class ArduinoBridge(Node):
     def __init__(self):
         super().__init__('arduino_bridge')
         
-        # Declare parameters
-        self.declare_parameter('port', '/dev/ttyUSB0')
+        # Parameters
+        self.declare_parameter('serial_port', '/dev/ttyUSB0')
         self.declare_parameter('baud_rate', 115200)
-        self.declare_parameter('timeout', 1.0)
         
-        port = self.get_parameter('port').value
-        baud_rate = self.get_parameter('baud_rate').value
-        timeout = self.get_parameter('timeout').value
+        port = self.get_parameter('serial_port').value
+        baud = self.get_parameter('baud_rate').value
         
-        # Connect to Arduino with retry
-        self.ser = None
-        max_retries = 5
-        for attempt in range(max_retries):
-            try:
-                self.ser = serial.Serial(port, baud_rate, timeout=timeout)
-                time.sleep(2)  # Wait for Arduino reset
-                self.ser.reset_input_buffer()
-                self.ser.reset_output_buffer()
-                self.get_logger().info(f'Arduino bridge started on {port} at {baud_rate} baud')
-                break
-            except Exception as e:
-                self.get_logger().warn(f'Failed to connect to Arduino (attempt {attempt+1}/{max_retries}): {e}')
-                if attempt < max_retries - 1:
-                    time.sleep(2)
-                else:
-                    self.get_logger().error('Could not connect to Arduino. Exiting.')
-                    raise
+        # Serial connection
+        try:
+            self.serial = serial.Serial(port, baud, timeout=0.1)
+            time.sleep(2)  # Wait for Arduino reset
+            self.get_logger().info(f'Connected to Arduino on {port}')
+        except Exception as e:
+            self.get_logger().error(f'Failed to connect to Arduino: {e}')
+            raise
         
-        # Subscribe to cmd_vel
-        self.subscription = self.create_subscription(
+        # Subscriber for cmd_vel
+        self.cmd_vel_sub = self.create_subscription(
             Twist,
             '/cmd_vel',
-            self.cmd_callback,
+            self.cmd_vel_callback,
             10
         )
         
-        # Watchdog timer - stop motors if no command received for 1 second
-        self.last_cmd_time = self.get_clock().now()
-        self.watchdog_timeout = 1.0  # seconds
-        self.timer = self.create_timer(0.1, self.watchdog_callback)
+        # Publisher for encoder data
+        self.encoder_pub = self.create_publisher(String, '/encoder_data', 10)
         
-        self.get_logger().info('Arduino bridge ready, listening on /cmd_vel')
-
-    def cmd_callback(self, msg):
-        if self.ser is None or not self.ser.is_open:
-            self.get_logger().error('Serial port not open')
-            return
-        
-        lin = msg.linear.x
-        ang = msg.angular.z
-        
-        # Format: "linear_x angular_z\n"
-        line = f"{lin:.3f} {ang:.3f}\n"
-        
+        # Timer to read from Arduino
+        self.timer = self.create_timer(0.01, self.read_serial)  # 100Hz
+    
+    def cmd_vel_callback(self, msg):
+        # Send command to Arduino: "linear,angular"
+        command = f"{msg.linear.x:.3f},{msg.angular.z:.3f}\n"
         try:
-            self.ser.write(line.encode('utf-8'))
-            self.last_cmd_time = self.get_clock().now()
-            self.get_logger().debug(f'Sent to Arduino: {line.strip()}')
-            
-            # Read any responses from Arduino (optional)
-            while self.ser.in_waiting:
-                response = self.ser.readline().decode('utf-8', errors='replace').strip()
-                if response:
-                    self.get_logger().info(f'Arduino: {response}')
-                    
+            self.serial.write(command.encode())
         except Exception as e:
             self.get_logger().error(f'Error writing to serial: {e}')
-
-    def watchdog_callback(self):
-        """Stop motors if no command received recently"""
-        now = self.get_clock().now()
-        time_since_last_cmd = (now - self.last_cmd_time).nanoseconds / 1e9
-        
-        if time_since_last_cmd > self.watchdog_timeout:
-            # Send stop command
-            if self.ser and self.ser.is_open:
-                try:
-                    self.ser.write(b"0.000 0.000\n")
-                    self.get_logger().warn('Watchdog: No recent commands, stopping motors')
-                    self.last_cmd_time = now  # Reset to avoid spamming
-                except Exception as e:
-                    self.get_logger().error(f'Watchdog error: {e}')
-
+    
+    def read_serial(self):
+        try:
+            if self.serial.in_waiting > 0:
+                line = self.serial.readline().decode('utf-8').strip()
+                
+                # Check if it's encoder data
+                if line.startswith('E,'):
+                    msg = String()
+                    msg.data = line
+                    self.encoder_pub.publish(msg)
+                else:
+                    # Log other messages from Arduino
+                    self.get_logger().info(f'Arduino: {line}')
+        except Exception as e:
+            self.get_logger().error(f'Error reading from serial: {e}')
+    
     def destroy_node(self):
-        # Stop motors on shutdown
-        if self.ser and self.ser.is_open:
-            try:
-                self.ser.write(b"0.000 0.000\n")
-                time.sleep(0.1)
-                self.ser.close()
-                self.get_logger().info('Arduino bridge closed')
-            except:
-                pass
+        self.serial.close()
         super().destroy_node()
 
 def main(args=None):
     rclpy.init(args=args)
     node = ArduinoBridge()
-    try:
-        rclpy.spin(node)
-    except KeyboardInterrupt:
-        pass
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

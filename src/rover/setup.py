@@ -13,7 +13,9 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         (os.path.join('share', package_name, 'launch'), glob('launch/*.py')),
-        (os.path.join('share', package_name, 'config'), glob('config/*.yaml')),
+        (os.path.join('share', package_name, 'urdf'), glob('urdf/*')),
+        (os.path.join('share', package_name, 'worlds'), glob('worlds/*')),
+        (os.path.join('share', package_name, 'config'), glob('config/*')),
 
     ],
     install_requires=['setuptools'],
@@ -27,6 +29,9 @@ setup(
         'console_scripts': [
             'controller = rover.controller:main',
             'arduino_bridge = rover.arduino_bridge:main',
+            'odometry_publisher = rover.odometry_publisher:main',
+            'motor_driver = rover.motor_driver:main',
+            'lidar_test = rover.lidar_test:main',
         ],
     },
 )
