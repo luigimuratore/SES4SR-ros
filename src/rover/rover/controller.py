@@ -12,7 +12,7 @@ class Controller(Node):
         self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
 
         # declare parameters
-        self.declare_parameter('max_speed', -0.2)
+        self.declare_parameter('max_speed', 0.2)
         self.declare_parameter('max_turn_rate', 1.0)
         self.declare_parameter('obstacle_threshold', 0.3)
         self.declare_parameter('is_active', True)
@@ -166,7 +166,7 @@ class Controller(Node):
                     self.get_logger().info(f'Obstacle at {self.closest_range_front:.2f}m! Turning RIGHT to {math.degrees(self.turn_target_yaw):.1f}°')
             else:
                 # No obstacle, move forward
-                cmd.linear.x = self.max_speed
+                cmd.linear.x = -self.max_speed
                 cmd.angular.z = 0.0
                 self.get_logger().info(f'Moving FORWARD at {self.max_speed} m/s', throttle_duration_sec=2.0)
         

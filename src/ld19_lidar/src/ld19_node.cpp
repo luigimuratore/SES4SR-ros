@@ -81,7 +81,7 @@ auto LD19Node::populate_message(const std::vector<PointData> & laser_data)->void
     // front of the sensor
     int index_offset = (int)map_range(M_PI / 2, 0, M_PI * 2.0, 0, max_index);  // 113;
     index += index_offset;
-    std::cout << "index_offset: " << index_offset << std::endl;
+    //std::cout << "index_offset: " << index_offset << std::endl;
 
     if (index > max_index) {
       index -= max_index;

@@ -57,9 +57,9 @@ class ArduinoBridge(Node):
                     msg = String()
                     msg.data = line
                     self.encoder_pub.publish(msg)
-                else:
+                #else:
                     # Log other messages from Arduino
-                    self.get_logger().info(f'Arduino: {line}')
+                    # self.get_logger().info(f'Arduino: {line}')
         except Exception as e:
             self.get_logger().error(f'Error reading from serial: {e}')
     
