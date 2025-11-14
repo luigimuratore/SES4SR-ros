@@ -67,26 +67,61 @@ def landmark_model_sample_pose(z, landmark, sigma):
     return np.array([x_, y_, theta_])
 
 
-def plot_sampled_poses(robot_pose, z, landmark, sigma):
-    """""
-    Plot sampled poses from the landmark model
-    """""
-    # plot samples poses
-    for i in range(500):
-        x_prime = landmark_model_sample_pose(z, landmark, sigma)
-        # plot robot pose
-        rotated_marker = mpl.markers.MarkerStyle(marker=arrow)
-        rotated_marker._transform = rotated_marker.get_transform().rotate_deg(math.degrees(x_prime[2])-90)
-        plt.scatter(x_prime[0], x_prime[1], marker=rotated_marker, s=80, facecolors='none', edgecolors='b')
+def plot_sampled_poses(robot_pose, z, landmark, sigma, n_samples=1000):
+    """
+    Plot sampled poses from the landmark model with statistics
+    """
+    samples = []
     
-    # plot real pose
+    # Generate samples
+    for i in range(n_samples):
+        x_prime = landmark_model_sample_pose(z, landmark, sigma)
+        samples.append(x_prime)
+        
+        # plot robot pose (make it less dense for visualization)
+        if i % 10 == 0:  # plot every 10th sample
+            rotated_marker = mpl.markers.MarkerStyle(marker=arrow)
+            rotated_marker._transform = rotated_marker.get_transform().rotate_deg(math.degrees(x_prime[2])-90)
+            plt.scatter(x_prime[0], x_prime[1], marker=rotated_marker, s=80, 
+                       facecolors='none', edgecolors='b', alpha=0.3)
+    
+    # Convert to numpy array
+    samples = np.array(samples)
+    
+    # Compute statistics
+    mean_pose = np.mean(samples, axis=0)
+    std_pose = np.std(samples, axis=0)
+    
+    print(f"\n{'='*60}")
+    print(f"Sampling Statistics (N={n_samples})")
+    print(f"{'='*60}")
+    print(f"Mean pose: x={mean_pose[0]:.3f}±{std_pose[0]:.3f}, "
+          f"y={mean_pose[1]:.3f}±{std_pose[1]:.3f}, "
+          f"theta={math.degrees(mean_pose[2]):.1f}±{math.degrees(std_pose[2]):.1f}°")
+    print(f"True pose: x={robot_pose[0]:.3f}, y={robot_pose[1]:.3f}, "
+          f"theta={math.degrees(robot_pose[2]):.1f}°")
+    
+    # Plot mean pose
+    rotated_marker = mpl.markers.MarkerStyle(marker=arrow)
+    rotated_marker._transform = rotated_marker.get_transform().rotate_deg(math.degrees(mean_pose[2])-90)
+    plt.scatter(mean_pose[0], mean_pose[1], marker=rotated_marker, s=200, 
+               facecolors='none', edgecolors='g', linewidths=2, label='Mean sampled pose')
+    
+    # Plot real pose
     rotated_marker = mpl.markers.MarkerStyle(marker=arrow)
     rotated_marker._transform = rotated_marker.get_transform().rotate_deg(math.degrees(robot_pose[2])-90)
-    plt.scatter(robot_pose[0], robot_pose[1], marker=rotated_marker, s=140, facecolors='none', edgecolors='r')
-
+    plt.scatter(robot_pose[0], robot_pose[1], marker=rotated_marker, s=200, 
+               facecolors='none', edgecolors='r', linewidths=2, label='True pose')
+    
+    # Plot covariance ellipse
+    plot_covariance_ellipse(mean_pose[:2], samples[:, :2])
+    
     plt.xlabel("x-position [m]")
     plt.ylabel("y-position [m]")
-    plt.title("Landmark Model Pose Sampling")
+    plt.title(f"Landmark Model Pose Sampling (N={n_samples})")
+    plt.legend()
+    plt.axis('equal')
+    plt.grid(True, alpha=0.3)
     # plt.savefig("landmark_model_sampling.pdf")
     plt.show()
 
@@ -145,6 +180,126 @@ def plot_landmarks(landmarks, robot_pose, z, p_z, max_range=6.0, fov=math.pi/4):
     plt.close('all')
 
 
+def compute_measurement_jacobian(robot_pose, landmark):
+    """
+    Compute the Jacobian H of the landmark measurement model with respect to the robot state
+    
+    The measurement model is:
+        h(x) = [r, phi]^T
+        where:
+            r = sqrt((m_x - x)^2 + (m_y - y)^2)
+            phi = atan2(m_y - y, m_x - x) - theta
+    
+    Inputs:
+        - robot_pose: the robot pose [x, y, theta]
+        - landmark: the landmark position [m_x, m_y]
+    
+    Outputs:
+        - H: the Jacobian matrix (2x3) of the measurement model
+             H = [∂h/∂x, ∂h/∂y, ∂h/∂theta]
+    """
+    x, y, theta = robot_pose[:]
+    m_x, m_y = landmark[:]
+    
+    # Compute intermediate values
+    delta_x = m_x - x
+    delta_y = m_y - y
+    q = delta_x**2 + delta_y**2  # squared distance
+    sqrt_q = math.sqrt(q)
+    
+    # Compute Jacobian H (2x3 matrix)
+    # First row: derivative of range r w.r.t. [x, y, theta]
+    # Second row: derivative of bearing phi w.r.t. [x, y, theta]
+    
+    H = np.array([
+        [-delta_x / sqrt_q,  -delta_y / sqrt_q,  0],      # ∂r/∂x, ∂r/∂y, ∂r/∂theta
+        [ delta_y / q,       -delta_x / q,       -1]       # ∂phi/∂x, ∂phi/∂y, ∂phi/∂theta
+    ])
+    
+    return H
+
+def verify_jacobian(robot_pose, landmark, H_analytical, epsilon=1e-5):
+    """
+    Verify the analytical Jacobian by comparing with numerical differentiation
+    
+    Inputs:
+        - robot_pose: the robot pose [x, y, theta]
+        - landmark: the landmark position [m_x, m_y]
+        - H_analytical: the analytically computed Jacobian
+        - epsilon: small perturbation for numerical differentiation
+    """
+    x, y, theta = robot_pose[:]
+    m_x, m_y = landmark[:]
+    
+    # Function to compute measurement
+    def h(pose):
+        px, py, ptheta = pose
+        dx = m_x - px
+        dy = m_y - py
+        r = math.sqrt(dx**2 + dy**2)
+        phi = math.atan2(dy, dx) - ptheta
+        return np.array([r, phi])
+    
+    # Compute numerical Jacobian
+    H_numerical = np.zeros((2, 3))
+    h0 = h(robot_pose)
+    
+    for i in range(3):
+        pose_plus = robot_pose.copy()
+        pose_plus[i] += epsilon
+        h_plus = h(pose_plus)
+        
+        pose_minus = robot_pose.copy()
+        pose_minus[i] -= epsilon
+        h_minus = h(pose_minus)
+        
+        # Central difference
+        H_numerical[:, i] = (h_plus - h_minus) / (2 * epsilon)
+    
+    print("Numerical Jacobian H_num =")
+    print(f"[{H_numerical[0,0]:8.4f}  {H_numerical[0,1]:8.4f}  {H_numerical[0,2]:8.4f}]")
+    print(f"[{H_numerical[1,0]:8.4f}  {H_numerical[1,1]:8.4f}  {H_numerical[1,2]:8.4f}]")
+    
+    # Compute error
+    error = np.linalg.norm(H_analytical - H_numerical)
+    print(f"\nJacobian verification error: {error:.6e}")
+    
+    if error < 1e-4:
+        print("✓ Jacobian is CORRECT!")
+    else:
+        print("✗ Jacobian may have errors!")
+    
+    return H_numerical
+
+def plot_covariance_ellipse(mean, samples, n_std=2):
+    """
+    Plot covariance ellipse from samples
+    
+    Inputs:
+        - mean: mean position [x, y]
+        - samples: array of sampled positions (Nx2)
+        - n_std: number of standard deviations for ellipse
+    """
+    from matplotlib.patches import Ellipse
+    
+    # Compute covariance matrix
+    cov = np.cov(samples.T)
+    
+    # Compute eigenvalues and eigenvectors
+    eigenvalues, eigenvectors = np.linalg.eig(cov)
+    
+    # Compute ellipse parameters
+    angle = math.degrees(math.atan2(eigenvectors[1, 0], eigenvectors[0, 0]))
+    width = 2 * n_std * math.sqrt(eigenvalues[0])
+    height = 2 * n_std * math.sqrt(eigenvalues[1])
+    
+    # Create ellipse
+    ellipse = Ellipse(mean, width, height, angle=angle, 
+                     facecolor='yellow', edgecolor='orange', 
+                     alpha=0.3, linewidth=2, label=f'{n_std}σ uncertainty')
+    
+    plt.gca().add_patch(ellipse)
+
 def main():
     ##############################
     ### Landmark model example ###
@@ -193,8 +348,30 @@ def main():
     landmark = landmarks[0]
     z = landmark_range_bearing_sensor(robot_pose, landmark, sigma)
 
+    print(f"\n{'='*60}")
+    print(f"TASK: Sampling poses from landmark model")
+    print(f"{'='*60}")
+    print(f"Robot pose: x={robot_pose[0]:.2f}, y={robot_pose[1]:.2f}, theta={math.degrees(robot_pose[2]):.2f}°")
+    print(f"Landmark position: x={landmark[0]:.2f}, y={landmark[1]:.2f}")
+    print(f"Measurement: range={z[0]:.2f}m, bearing={math.degrees(z[1]):.2f}°")
+    
+    # Compute and display Jacobian
+    print(f"\n{'='*60}")
+    print(f"Computing Jacobian H of measurement model")
+    print(f"{'='*60}")
+    H = compute_measurement_jacobian(robot_pose, landmark)
+    print("Jacobian H (∂h/∂x) =")
+    print(f"[∂r/∂x    ∂r/∂y    ∂r/∂theta  ]   [{H[0,0]:8.4f}  {H[0,1]:8.4f}  {H[0,2]:8.4f}]")
+    print(f"[∂phi/∂x  ∂phi/∂y  ∂phi/∂theta] = [{H[1,0]:8.4f}  {H[1,1]:8.4f}  {H[1,2]:8.4f}]")
+    
+    # Verify Jacobian with numerical differentiation
+    print(f"\n{'='*60}")
+    print(f"Verifying Jacobian with numerical differentiation")
+    print(f"{'='*60}")
+    verify_jacobian(robot_pose, landmark, H)
+
     # plot landmark
-    plt.plot(landmark[0], landmark[1], "sk", ms=10)
+    plt.plot(landmark[0], landmark[1], "sk", ms=10, label='Landmark')
     plot_sampled_poses(robot_pose, z, landmark, sigma)
     
     plt.close('all')
