@@ -1,0 +1,18 @@
+camera:
+  apriltag:
+    ros__parameters:
+      # setup (defaults)
+      image_transport: raw  # image format: "raw" or "compressed"
+      family: 36h11         # tag family name: 16h5, 25h9, 36h11
+      size: 0.16             # default tag edge size in meter
+      profile: false        # print profiling information to stdout
+
+      # tuning of detection (defaults)
+      max_hamming: 0        # maximum allowed hamming distance (corrected bits)
+      detector:
+        threads: 1          # number of threads
+        decimate: 2.0       # decimate resolution for quad detection
+        blur: 0.0           # sigma of Gaussian blur for quad detection
+        refine: true           # snap to strong gradients
+        sharpening: 0.25    # sharpening of decoded images
+        debug: false    
