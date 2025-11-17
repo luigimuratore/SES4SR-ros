@@ -44,16 +44,19 @@ def compute_jacobians(x, u, dt):
     beta = theta_s + w_s * dt_s
     R = v_s / w_s
 
+    # Define the motion model symbolically
     gux = Matrix([
         [x_s - R * sympy.sin(theta_s) + R * sympy.sin(beta)],
         [y_s + R * sympy.cos(theta_s) - R * sympy.cos(beta)],
         [beta],
-    ])
+    ]) # matrix making the motion model
 
     # lambdify evaluators (return numeric callable functions)
-    eval_gux = sympy.lambdify((x_s, y_s, theta_s, v_s, w_s, dt_s), gux, 'numpy')
-    Gt = gux.jacobian(Matrix([x_s, y_s, theta_s]))
-    eval_Gt = sympy.lambdify((x_s, y_s, theta_s, v_s, w_s, dt_s), Gt, 'numpy')
+    eval_gux = sympy.lambdify((x_s, y_s, theta_s, v_s, w_s, dt_s), gux, 'numpy') # transform symbolic to function
+    
+    Gt = gux.jacobian(Matrix([x_s, y_s, theta_s])) # Jacobian w.r.t state
+    eval_Gt = sympy.lambdify((x_s, y_s, theta_s, v_s, w_s, dt_s), Gt, 'numpy') # transform function to values
+
     Vt = gux.jacobian(Matrix([v_s, w_s]))
     eval_Vt = sympy.lambdify((x_s, y_s, theta_s, v_s, w_s, dt_s), Vt, 'numpy')
 
