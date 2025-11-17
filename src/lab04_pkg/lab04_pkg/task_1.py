@@ -1,26 +1,30 @@
+import os
+import yaml
+import numpy as np
+
 import rclpy
 from rclpy.node import Node
-import numpy as np
-from numpy.linalg import inv
-import yaml
-import os
 from ament_index_python.packages import get_package_share_directory
 
 from nav_msgs.msg import Odometry
 from landmark_msgs.msg import LandmarkArray
-from geometry_msgs.msg import PoseWithCovariance, TwistWithCovariance
 from lab04_pkg.models.ekf import RobotEKF
+
+
+def wrap_angle(angle):
+    """Normalize angle to [-pi, pi]."""
+    return np.arctan2(np.sin(angle), np.cos(angle))
 
 
 class EKFLocalizationNode(Node):
     """
-    ROS 2 Node for EKF-based robot localization using landmarks
+    ROS 2 Node for EKF-based robot localization using landmarks.
     """
-    
+
     def __init__(self):
         super().__init__('task_1')
-        
-        # Declare parameters
+
+        # Parameters
         self.declare_parameter('prediction_rate', 20.0)  # Hz
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.0)
@@ -29,8 +33,7 @@ class EKFLocalizationNode(Node):
         self.declare_parameter('process_noise_omega', 0.05)
         self.declare_parameter('measurement_noise_range', 0.1)
         self.declare_parameter('measurement_noise_bearing', 0.05)
-        
-        # Get parameters
+
         self.prediction_rate = self.get_parameter('prediction_rate').value
         initial_x = self.get_parameter('initial_x').value
         initial_y = self.get_parameter('initial_y').value
@@ -39,342 +42,344 @@ class EKFLocalizationNode(Node):
         self.sigma_omega = self.get_parameter('process_noise_omega').value
         self.sigma_range = self.get_parameter('measurement_noise_range').value
         self.sigma_bearing = self.get_parameter('measurement_noise_bearing').value
-        
-        # Initialize EKF
+
+        # Precompute control noise vector and measurement covariance
+        self.sigma_u_vec = np.array([self.sigma_v, self.sigma_omega])
+        self.Qt = np.diag([self.sigma_range ** 2, self.sigma_bearing ** 2])
+
+        # Initialize EKF and landmarks
         self._initialize_ekf(initial_x, initial_y, initial_theta)
-        
-        # Load landmarks from yaml file
         self.landmarks = self._load_landmarks()
         self.get_logger().info(f"Loaded {len(self.landmarks)} landmarks")
-        
-        # Store last velocity command
+
+        # Last velocity from odom
         self.last_v = 0.0
         self.last_omega = 0.0
-        self.last_odom_time = self.get_clock().now()
-        
-        # Create subscribers
+
+        # Time bookkeeping for dt
+        self.last_prediction_time = self.get_clock().now()
+
+        # Subscribers
         self.odom_sub = self.create_subscription(
             Odometry,
             '/odom',
             self.odom_callback,
             10
         )
-        
+
         self.landmark_sub = self.create_subscription(
             LandmarkArray,
-            '/landmarks',  # Use '/camera/landmarks' on real robot
+            '/landmarks',  # '/camera/landmarks' on real robot
             self.landmark_callback,
             10
         )
-        
-        # Create publisher
+
+        # Publisher
         self.ekf_pub = self.create_publisher(Odometry, '/ekf', 10)
-        
-        # Create timer for prediction at 20 Hz
+
+        # Prediction timer
         timer_period = 1.0 / self.prediction_rate
         self.timer = self.create_timer(timer_period, self.prediction_callback)
-        
+
+        self._prediction_count = 0
         self.get_logger().info('EKF Localization Node initialized')
         self.get_logger().info(f'Prediction rate: {self.prediction_rate} Hz')
-    
+
+    # ---------------- EKF setup ----------------
+
     def _initialize_ekf(self, x, y, theta):
-        """Initialize the EKF with motion and measurement models"""
-        
-        # Motion model: g(mu, u) for differential drive
+        """Initialize EKF with motion model and Jacobians."""
+
+        # Motion model g(mu, u): unicycle, discretized
         def eval_gux(mu, u, sigma_u, dt):
-            x, y, theta = mu
-            v, omega = u
-            
-            x_new = x + v * np.cos(theta) * dt
-            y_new = y + v * np.sin(theta) * dt
-            theta_new = theta + omega * dt
-            
-            # Normalize angle to [-pi, pi]
-            theta_new = np.arctan2(np.sin(theta_new), np.cos(theta_new))
-            
-            return np.array([x_new, y_new, theta_new])
-        
-        # Jacobian G_t: derivative of motion model w.r.t. state
-        def eval_Gt(x, y, theta, v, omega, dt):
+            x, y, th = mu
+            v, w = u
+
+            # Use exact unicycle model when |w| is not tiny, else straight-line
+            eps = 1e-5
+            if abs(w) > eps:
+                r = v / w
+                th_new = th + w * dt
+                x_new = x + r * (np.sin(th_new) - np.sin(th))
+                y_new = y - r * (np.cos(th_new) - np.cos(th))
+            else:
+                th_new = th + w * dt
+                x_new = x + v * np.cos(th) * dt
+                y_new = y + v * np.sin(th) * dt
+
+            th_new = wrap_angle(th_new)
+            return np.array([x_new, y_new, th_new])
+
+        # Jacobian wrt state
+        def eval_Gt(x, y, th, v, w, dt):
+            eps = 1e-5
+            if abs(w) > eps:
+                r = v / w
+                th_new = th + w * dt
+                s_th, c_th = np.sin(th), np.cos(th)
+                s_th_new, c_th_new = np.sin(th_new), np.cos(th_new)
+
+                dxdth = r * (c_th_new - c_th)
+                dydth = r * (s_th_new - s_th)
+            else:
+                dxdth = -v * np.sin(th) * dt
+                dydth = v * np.cos(th) * dt
+
             return np.array([
-                [1, 0, -v * np.sin(theta) * dt],
-                [0, 1,  v * np.cos(theta) * dt],
-                [0, 0,  1]
+                [1.0, 0.0, dxdth],
+                [0.0, 1.0, dydth],
+                [0.0, 0.0, 1.0]
             ])
-        
-        # Jacobian V_t: derivative of motion model w.r.t. control
-        def eval_Vt(x, y, theta, v, omega, dt):
+
+        # Jacobian wrt control
+        def eval_Vt(x, y, th, v, w, dt):
+            eps = 1e-5
+            if abs(w) > eps:
+                th_new = th + w * dt
+                s_th, c_th = np.sin(th), np.cos(th)
+                s_th_new, c_th_new = np.sin(th_new), np.cos(th_new)
+                w2 = w * w
+
+                dvx = (w * (s_th_new - s_th) - v * (c_th_new - c_th)) / w2
+                dvy = (w * (-c_th_new + c_th) - v * (s_th_new - s_th)) / w2
+
+                dwx = v * (c_th_new * dt * w - (s_th_new - s_th)) / w2
+                dwy = v * (s_th_new * dt * w - (-c_th_new + c_th)) / w2
+            else:
+                dvx = np.cos(th) * dt
+                dvy = np.sin(th) * dt
+                dwx = -0.5 * v * dt * dt * np.sin(th)
+                dwy = 0.5 * v * dt * dt * np.cos(th)
+
             return np.array([
-                [np.cos(theta) * dt, 0],
-                [np.sin(theta) * dt, 0],
-                [0, dt]
+                [dvx, dwx],
+                [dvy, dwy],
+                [0.0, dt]
             ])
-        
-        # Create EKF instance
+
         self.ekf = RobotEKF(
-            dim_x=3,  # [x, y, theta]
-            dim_u=2,  # [v, omega]
+            dim_x=3,
+            dim_u=2,
             eval_gux=eval_gux,
             eval_Gt=eval_Gt,
             eval_Vt=eval_Vt
         )
-        
-        # Set initial state
+
         self.ekf.mu = np.array([x, y, theta])
-        
-        # Set initial covariance (small uncertainty at start)
         self.ekf.Sigma = np.diag([0.01, 0.01, 0.01])
-        
-        # Set process noise covariance M_t
-        self.ekf.Mt = np.diag([self.sigma_v**2, self.sigma_omega**2])
-        
-        self.get_logger().info(f'EKF initialized at [{x:.2f}, {y:.2f}, {theta:.2f}]')
-    
+        self.ekf.Mt = np.diag([self.sigma_v ** 2, self.sigma_omega ** 2])
+
+        self.get_logger().info(
+            f'EKF initialized at [{x:.2f}, {y:.2f}, {theta:.2f}]'
+        )
+
     def _load_landmarks(self):
-        """Load landmark positions from yaml file"""
+        """Load landmark positions from YAML."""
         try:
-            # Try to load from lab04_pkg first
+            # Prefer local config, then fallback
             package_share = get_package_share_directory('lab04_pkg')
             yaml_file = os.path.join(package_share, 'config', 'landmarks.yaml')
-            
-            # If not found, try turtlebot3_perception
+
             if not os.path.exists(yaml_file):
                 package_share = get_package_share_directory('turtlebot3_perception')
                 yaml_file = os.path.join(package_share, 'config', 'landmarks.yaml')
-            
+
             self.get_logger().info(f'Loading landmarks from: {yaml_file}')
-            
+
             with open(yaml_file, 'r') as f:
                 data = yaml.safe_load(f)
-                
-                # Parse the landmarks (format: lists of id, x, y, z)
-                landmark_data = data['landmarks']
-                ids = landmark_data['id']
-                xs = landmark_data['x']
-                ys = landmark_data['y']
-                
-                landmarks = {}
-                for i in range(len(ids)):
-                    landmarks[ids[i]] = np.array([xs[i], ys[i]])
-                    self.get_logger().info(
-                        f'  Landmark {ids[i]}: ({xs[i]:.2f}, {ys[i]:.2f})'
-                    )
-                
-                return landmarks
-                
+
+            lm_data = data['landmarks']
+            ids = lm_data['id']
+            xs = lm_data['x']
+            ys = lm_data['y']
+
+            landmarks = {}
+            for i in range(len(ids)):
+                landmarks[ids[i]] = np.array([xs[i], ys[i]])
+                self.get_logger().info(
+                    f'  Landmark {ids[i]}: ({xs[i]:.2f}, {ys[i]:.2f})'
+                )
+
+            return landmarks
+
         except Exception as e:
             self.get_logger().error(f'Could not load landmarks from yaml: {e}')
             self.get_logger().warn('Using default landmark positions')
-            
-            # Default landmarks matching your YAML
             return {
                 11: np.array([-1.1, -1.1]),
-                12: np.array([-1.1, 0.0]),
-                13: np.array([-1.1, 1.1]),
-                21: np.array([0.0, -1.1]),
-                22: np.array([0.0, 0.0]),
-                23: np.array([0.0, 1.1]),
-                31: np.array([1.1, -1.1]),
-                32: np.array([1.1, 0.0]),
-                33: np.array([1.1, 1.1]),
+                12: np.array([-1.1,  0.0]),
+                13: np.array([-1.1,  1.1]),
+                21: np.array([ 0.0, -1.1]),
+                22: np.array([ 0.0,  0.0]),
+                23: np.array([ 0.0,  1.1]),
+                31: np.array([ 1.1, -1.1]),
+                32: np.array([ 1.1,  0.0]),
+                33: np.array([ 1.1,  1.1]),
             }
-    
-    def odom_callback(self, msg):
-        """
-        Callback for odometry messages
-        Extract linear and angular velocities
-        """
-        # Extract velocities from odometry
+
+    # ---------------- Callbacks ----------------
+
+    def odom_callback(self, msg: Odometry):
+        """Store latest linear and angular velocity from /odom."""
         self.last_v = msg.twist.twist.linear.x
         self.last_omega = msg.twist.twist.angular.z
-        self.last_odom_time = self.get_clock().now()
-    
+
     def prediction_callback(self):
-        """
-        Timer callback for EKF prediction step (20 Hz)
-        """
-        # Compute dt
-        current_time = self.get_clock().now()
-        dt = 1.0 / self.prediction_rate
-        
-        # Control input
+        """EKF prediction step, called at fixed rate."""
+        now = self.get_clock().now()
+        dt = (now - self.last_prediction_time).nanoseconds * 1e-9
+        if dt <= 0.0:
+            dt = 1.0 / self.prediction_rate  # fallback
+        self.last_prediction_time = now
+
         u = np.array([self.last_v, self.last_omega])
-        sigma_u = np.sqrt(np.diag(self.ekf.Mt))
-        
-        # Store state before prediction
-        state_before = self.ekf.mu.copy()
-        
-        # Perform prediction
-        self.ekf.predict(u=u, sigma_u=sigma_u, g_extra_args=(dt,))
-        
-        # Log state every 1 second (20 predictions)
-        if not hasattr(self, '_prediction_count'):
-            self._prediction_count = 0
-        
+
+        # EKF prediction
+        self.ekf.predict(u=u, sigma_u=self.sigma_u_vec, g_extra_args=(dt,))
+
+        # Some periodic logging
         self._prediction_count += 1
-        
-        if self._prediction_count % 20 == 0:
+        if self._prediction_count % int(self.prediction_rate) == 0:
             self.get_logger().info(
-                f'PREDICTION #{self._prediction_count}: '
-                f'State: [{self.ekf.mu[0]:.3f}, {self.ekf.mu[1]:.3f}, {np.degrees(self.ekf.mu[2]):.1f}°] | '
-                f'Uncertainty: σ_x={np.sqrt(self.ekf.Sigma[0,0]):.3f}, '
-                f'σ_y={np.sqrt(self.ekf.Sigma[1,1]):.3f}, '
-                f'σ_θ={np.degrees(np.sqrt(self.ekf.Sigma[2,2])):.1f}° | '
-                f'Control: v={self.last_v:.2f}, ω={self.last_omega:.2f}'
+                f'PRED #{self._prediction_count}: '
+                f'μ = [{self.ekf.mu[0]:.3f}, {self.ekf.mu[1]:.3f}, '
+                f'{np.degrees(self.ekf.mu[2]):.1f}°], '
+                f'σx={np.sqrt(self.ekf.Sigma[0, 0]):.3f}, '
+                f'σy={np.sqrt(self.ekf.Sigma[1, 1]):.3f}, '
+                f'σθ={np.degrees(np.sqrt(self.ekf.Sigma[2, 2])):.1f}°, '
+                f'v={self.last_v:.2f}, ω={self.last_omega:.2f}'
             )
-        
-        # Publish estimated state
+
         self._publish_state()
-    
-    def landmark_callback(self, msg):
-        """
-        Callback for landmark measurements
-        Perform EKF update for each detected landmark
-        """
-        if len(msg.landmarks) == 0:
+
+    def landmark_callback(self, msg: LandmarkArray):
+        """EKF update for each landmark measurement."""
+        if not msg.landmarks:
             return
-        
-        self.get_logger().info(
-            f'LANDMARK MEASUREMENT: Received {len(msg.landmarks)} landmarks'
-        )
-        
-        num_successful_updates = 0
-        
-        # Process each landmark measurement
-        for landmark in msg.landmarks:
-            landmark_id = landmark.id
-            
-            # Check if we know this landmark
-            if landmark_id not in self.landmarks:
-                self.get_logger().warn(f'Unknown landmark ID: {landmark_id}')
+
+        num_updates = 0
+        for lm in msg.landmarks:
+            lm_id = lm.id
+
+            if lm_id not in self.landmarks:
+                self.get_logger().warn(f'Unknown landmark ID: {lm_id}')
                 continue
-            
-            # Get landmark position
-            lm_x, lm_y = self.landmarks[landmark_id]
-            
-            # Measurement: [range, bearing]
-            z = np.array([landmark.range, landmark.bearing])
-            
-            # Store state before update
-            state_before = self.ekf.mu.copy()
-            uncertainty_before = np.sqrt(np.diag(self.ekf.Sigma))
-            
-            # Measurement noise covariance
-            Qt = np.diag([self.sigma_range**2, self.sigma_bearing**2])
-            
-            # Measurement model: h(x) = [range, bearing] from robot to landmark
-            def eval_hx(x, y, theta, lm_x, lm_y):
-                dx = lm_x - x
-                dy = lm_y - y
-                q = dx**2 + dy**2
-                
-                range_pred = np.sqrt(q)
-                bearing_pred = np.arctan2(dy, dx) - theta
-                
-                # Normalize bearing to [-pi, pi]
-                bearing_pred = np.arctan2(np.sin(bearing_pred), np.cos(bearing_pred))
-                
-                return np.array([range_pred, bearing_pred])
-            
-            # Jacobian H_t: derivative of measurement model w.r.t. state
-            def eval_Ht(x, y, theta, lm_x, lm_y):
-                dx = lm_x - x
-                dy = lm_y - y
-                q = dx**2 + dy**2
-                sqrt_q = np.sqrt(q)
-                
-                return np.array([
-                    [-dx/sqrt_q, -dy/sqrt_q, 0],
-                    [dy/q, -dx/q, -1]
-                ])
-            
-            # Residual function for angle normalization
-            def residual(z, z_pred, angle_idx=1):
-                res = z - z_pred
-                # Normalize bearing difference to [-pi, pi]
-                res[angle_idx] = np.arctan2(np.sin(res[angle_idx]), np.cos(res[angle_idx]))
-                return res
-            
-            # Perform update
+
+            lm_x, lm_y = self.landmarks[lm_id]
+            z = np.array([lm.range, lm.bearing])
+
+            mu_before = self.ekf.mu.copy()
+            sigma_before = np.sqrt(np.diag(self.ekf.Sigma))
+
             try:
                 self.ekf.update(
                     z=z,
-                    eval_hx=eval_hx,
-                    eval_Ht=eval_Ht,
-                    Qt=Qt,
+                    eval_hx=self._eval_hx,
+                    eval_Ht=self._eval_Ht,
+                    Qt=self.Qt,
                     hx_args=(*self.ekf.mu, lm_x, lm_y),
                     Ht_args=(*self.ekf.mu, lm_x, lm_y),
-                    residual=residual,
+                    residual=self._residual,
                     angle_idx=1
                 )
-                
-                # Calculate change
-                state_change = self.ekf.mu - state_before
-                uncertainty_after = np.sqrt(np.diag(self.ekf.Sigma))
-                uncertainty_reduction = uncertainty_before - uncertainty_after
-                
-                num_successful_updates += 1
-                
-                self.get_logger().info(
-                    f'  └─ UPDATE with landmark {landmark_id} at ({lm_x:.1f}, {lm_y:.1f}): '
-                    f'Measured [r={z[0]:.2f}m, θ={np.degrees(z[1]):.1f}°] | '
-                    f'State correction: Δx={state_change[0]:.3f}, Δy={state_change[1]:.3f}, '
-                    f'Δθ={np.degrees(state_change[2]):.1f}° | '
-                    f'Uncertainty reduced by: {uncertainty_reduction[0]:.3f}, {uncertainty_reduction[1]:.3f}'
-                )
-                
             except Exception as e:
-                self.get_logger().error(f'Update failed for landmark {landmark_id}: {e}')
-        
-        if num_successful_updates > 0:
+                self.get_logger().error(f'Update failed for landmark {lm_id}: {e}')
+                continue
+
+            num_updates += 1
+            dmu = self.ekf.mu - mu_before
+            sigma_after = np.sqrt(np.diag(self.ekf.Sigma))
+            sigma_red = sigma_before - sigma_after
+
             self.get_logger().info(
-                f'AFTER UPDATES: State: [{self.ekf.mu[0]:.3f}, {self.ekf.mu[1]:.3f}, {np.degrees(self.ekf.mu[2]):.1f}°] | '
-                f'Uncertainty: σ_x={np.sqrt(self.ekf.Sigma[0,0]):.3f}, '
-                f'σ_y={np.sqrt(self.ekf.Sigma[1,1]):.3f}'
+                f'  UPDATE with lm {lm_id} at ({lm_x:.1f}, {lm_y:.1f}): '
+                f'z = [r={z[0]:.2f}, θ={np.degrees(z[1]):.1f}°], '
+                f'Δμ = [{dmu[0]:.3f}, {dmu[1]:.3f}, {np.degrees(dmu[2]):.1f}°], '
+                f'σ red ≈ [{sigma_red[0]:.3f}, {sigma_red[1]:.3f}]'
             )
-        
-        # Publish updated state
+
+        if num_updates > 0:
+            self.get_logger().info(
+                f'AFTER UPDATES: μ = [{self.ekf.mu[0]:.3f}, '
+                f'{self.ekf.mu[1]:.3f}, {np.degrees(self.ekf.mu[2]):.1f}°], '
+                f'σx={np.sqrt(self.ekf.Sigma[0,0]):.3f}, '
+                f'σy={np.sqrt(self.ekf.Sigma[1,1]):.3f}'
+            )
+
         self._publish_state()
-    
+
+    # ---------------- Measurement model helpers ----------------
+
+    @staticmethod
+    def _eval_hx(x, y, theta, lm_x, lm_y):
+        """Measurement model h(x): [range, bearing]."""
+        dx = lm_x - x
+        dy = lm_y - y
+        q = dx ** 2 + dy ** 2
+
+        r = np.sqrt(q)
+        bearing = np.arctan2(dy, dx) - theta
+        bearing = wrap_angle(bearing)
+
+        return np.array([r, bearing])
+
+    @staticmethod
+    def _eval_Ht(x, y, theta, lm_x, lm_y):
+        """Jacobian of measurement model wrt state."""
+        dx = lm_x - x
+        dy = lm_y - y
+        q = dx ** 2 + dy ** 2
+        sqrt_q = np.sqrt(q)
+
+        return np.array([
+            [-dx / sqrt_q, -dy / sqrt_q, 0.0],
+            [dy / q,       -dx / q,     -1.0]
+        ])
+
+    @staticmethod
+    def _residual(z, z_pred, angle_idx=1):
+        """Innovation with angle wrapping on bearing."""
+        res = z - z_pred
+        res[angle_idx] = wrap_angle(res[angle_idx])
+        return res
+
+    # ---------------- Publishing ----------------
+
     def _publish_state(self):
-        """Publish current EKF state as Odometry message"""
+        """Publish EKF state as Odometry on /ekf."""
         msg = Odometry()
-        
-        # Header
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'odom'
         msg.child_frame_id = 'base_footprint'
-        
-        # Position
+
+        # Pose
         msg.pose.pose.position.x = float(self.ekf.mu[0])
         msg.pose.pose.position.y = float(self.ekf.mu[1])
         msg.pose.pose.position.z = 0.0
-        
-        # Orientation (convert theta to quaternion)
+
         theta = float(self.ekf.mu[2])
         msg.pose.pose.orientation.x = 0.0
         msg.pose.pose.orientation.y = 0.0
         msg.pose.pose.orientation.z = np.sin(theta / 2.0)
         msg.pose.pose.orientation.w = np.cos(theta / 2.0)
-        
-        # Covariance (6x6 matrix, we only have x, y, theta)
-        covariance = np.zeros((6, 6))
-        covariance[0:2, 0:2] = self.ekf.Sigma[0:2, 0:2]  # x, y
-        covariance[5, 5] = self.ekf.Sigma[2, 2]  # theta
-        msg.pose.covariance = covariance.flatten().tolist()
-        
-        # Velocity (use last command)
+
+        # 6x6 covariance: fill x, y, yaw
+        cov = np.zeros((6, 6))
+        cov[0:2, 0:2] = self.ekf.Sigma[0:2, 0:2]
+        cov[5, 5] = self.ekf.Sigma[2, 2]
+        msg.pose.covariance = cov.flatten().tolist()
+
+        # Twist
         msg.twist.twist.linear.x = float(self.last_v)
         msg.twist.twist.angular.z = float(self.last_omega)
-        
-        # Publish
+
         self.ekf_pub.publish(msg)
 
 
 def main(args=None):
     rclpy.init(args=args)
     node = EKFLocalizationNode()
-    
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
