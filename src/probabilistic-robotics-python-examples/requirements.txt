@@ -1,0 +1,9 @@
+filterpy==1.4.5
+ipykernel
+matplotlib==3.5.1
+numpy==1.26.4
+pillow==11.3.0
+scikit-image==0.25.2
+scikit-learn
+scipy==1.15.3
+sympy==1.9
