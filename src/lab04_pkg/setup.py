@@ -1,4 +1,6 @@
 from setuptools import find_packages, setup
+import os
+from glob import glob
 
 package_name = 'lab04_pkg'
 
@@ -10,6 +12,8 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'config'), glob('lab04_pkg/config/*.yaml')),
+        (os.path.join('share', package_name, 'launch'), glob('lab04_pkg/launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -17,14 +21,10 @@ setup(
     maintainer_email='peter.furlan01@gmail.com',
     description='TODO: Package description',
     license='Apache-2.0',
-    extras_require={
-        'test': [
-            'pytest',
-        ],
-    },
+    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'ekf_node = lab04_pkg.ekf_node:main',
+            'task_1 = lab04_pkg.task_1:main',
         ],
     },
 )

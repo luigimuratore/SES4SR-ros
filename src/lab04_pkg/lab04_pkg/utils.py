@@ -216,3 +216,171 @@ def bresenham(x0, y0, x1, y1, map):
             y0 += sy
         
     return obst
+
+def compute_measurement_jacobian(robot_pose, landmark):
+    """
+    Compute Jacobian of landmark measurement model (H matrix)
+    From task_0_b.py
+    
+    Args:
+        robot_pose: [x, y, theta]
+        landmark: [m_x, m_y]
+    
+    Returns:
+        H: 2x3 Jacobian matrix
+    """
+    x, y, theta = robot_pose
+    m_x, m_y = landmark
+    
+    dx = m_x - x
+    dy = m_y - y
+    q = dx**2 + dy**2
+    sqrt_q = np.sqrt(q)
+    
+    H = np.array([
+        [-dx/sqrt_q, -dy/sqrt_q, 0.0],
+        [dy/q, -dx/q, -1.0]
+    ])
+    
+    return H
+
+
+def landmark_measurement_model(robot_pose, landmark):
+    """
+    Compute expected measurement [range, bearing] from robot to landmark
+    From task_0_b.py
+    
+    Args:
+        robot_pose: [x, y, theta]
+        landmark: [m_x, m_y]
+    
+    Returns:
+        z_expected: [range, bearing]
+    """
+    x, y, theta = robot_pose
+    m_x, m_y = landmark
+    
+    dx = m_x - x
+    dy = m_y - y
+    
+    range_pred = np.sqrt(dx**2 + dy**2)
+    bearing_pred = np.arctan2(dy, dx) - theta
+    bearing_pred = normalize_angle(bearing_pred)
+    
+    return np.array([range_pred, bearing_pred])
+
+
+def compute_motion_jacobians(dt):
+    """
+    Compute symbolic Jacobians for velocity motion model using SymPy
+    From task_0_a.py
+    
+    Args:
+        dt: time step (can be symbolic or numeric)
+    
+    Returns:
+        eval_gux: function to evaluate motion model g(x, u)
+        eval_Gt: function to evaluate Jacobian w.r.t. state
+        eval_Vt: function to evaluate Jacobian w.r.t. control
+    """
+    try:
+        from sympy import symbols, Matrix, sin, cos, lambdify
+        import sympy
+        
+        # Define symbolic variables
+        x_s, y_s, theta_s = symbols('x y theta')
+        v_s, w_s = symbols('v w')
+        dt_s = symbols('dt')
+        
+        # Motion model for differential drive
+        # x' = x + v*cos(theta)*dt
+        # y' = y + v*sin(theta)*dt
+        # theta' = theta + w*dt
+        
+        gux = Matrix([
+            [x_s + v_s * cos(theta_s) * dt_s],
+            [y_s + v_s * sin(theta_s) * dt_s],
+            [theta_s + w_s * dt_s]
+        ])
+        
+        # Lambdify for numerical evaluation
+        eval_gux = lambdify((x_s, y_s, theta_s, v_s, w_s, dt_s), gux, 'numpy')
+        
+        # Jacobian w.r.t. state [x, y, theta]
+        Gt = gux.jacobian(Matrix([x_s, y_s, theta_s]))
+        eval_Gt = lambdify((x_s, y_s, theta_s, v_s, w_s, dt_s), Gt, 'numpy')
+        
+        # Jacobian w.r.t. control [v, w]
+        Vt = gux.jacobian(Matrix([v_s, w_s]))
+        eval_Vt = lambdify((x_s, y_s, theta_s, v_s, w_s, dt_s), Vt, 'numpy')
+        
+        return eval_gux, eval_Gt, eval_Vt
+        
+    except ImportError:
+        print("Warning: SymPy not available, returning None")
+        return None, None, None
+
+
+def sample_velocity_motion_model(x, u, a, dt):
+    """
+    Sample velocity motion model with noise
+    From task_0_a.py
+    
+    Args:
+        x: pose of the robot before moving [x, y, theta]
+        u: velocity reading [v, w]
+        a: noise parameters [a1, a2, a3, a4, a5, a6]
+        dt: time interval
+    
+    Returns:
+        x_new: new pose [x, y, theta] after motion
+    """
+    # Add noise to velocity commands
+    v_hat = u[0] + np.random.normal(0, np.sqrt(a[0]*u[0]**2 + a[1]*u[1]**2))
+    w_hat = u[1] + np.random.normal(0, np.sqrt(a[2]*u[0]**2 + a[3]*u[1]**2))
+    gamma_hat = np.random.normal(0, np.sqrt(a[4]*u[0]**2 + a[5]*u[1]**2))
+    
+    # Apply motion model
+    x_new = x[0] + v_hat * np.cos(x[2]) * dt
+    y_new = x[1] + v_hat * np.sin(x[2]) * dt
+    theta_new = x[2] + w_hat * dt + gamma_hat
+    theta_new = normalize_angle(theta_new)
+    
+    return np.array([x_new, y_new, theta_new])
+
+
+def create_motion_model_functions():
+    """
+    Create motion model functions for EKF (non-symbolic version)
+    Simpler alternative to compute_motion_jacobians
+    
+    Returns:
+        eval_gux: motion model function
+        eval_Gt: Jacobian w.r.t. state
+        eval_Vt: Jacobian w.r.t. control
+    """
+    
+    def eval_gux(x, y, theta, v, omega, dt):
+        """Motion model for differential drive"""
+        x_new = x + v * np.cos(theta) * dt
+        y_new = y + v * np.sin(theta) * dt
+        theta_new = normalize_angle(theta + omega * dt)
+        return np.array([x_new, y_new, theta_new])
+    
+    def eval_Gt(x, y, theta, v, omega, dt):
+        """Jacobian w.r.t. state"""
+        return np.array([
+            [1, 0, -v * np.sin(theta) * dt],
+            [0, 1,  v * np.cos(theta) * dt],
+            [0, 0,  1]
+        ])
+    
+    def eval_Vt(x, y, theta, v, omega, dt):
+        """Jacobian w.r.t. control"""
+        return np.array([
+            [np.cos(theta) * dt, 0],
+            [np.sin(theta) * dt, 0],
+            [0, dt]
+        ])
+    
+    return eval_gux, eval_Gt, eval_Vt
