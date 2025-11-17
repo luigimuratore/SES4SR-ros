@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.patches import Arc
-from models.utils import compute_p_hit_dist
 
 from models.landmark_model import (
     landmark_range_bearing_sensor,
