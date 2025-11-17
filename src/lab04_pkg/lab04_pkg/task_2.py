@@ -43,11 +43,13 @@ class EKFLocalizationTask2(Node):
         self.declare_parameter('measurement_noise_bearing', 0.05)
 
         # Encoder measurement noise (odom -> v, omega)
-        self.declare_parameter('encoder_noise_v', 0.05)
-        self.declare_parameter('encoder_noise_omega', 0.05)
+        # These should reflect the accuracy of your wheel encoders
+        self.declare_parameter('encoder_noise_v', 0.05)       # ~5 cm/s uncertainty
+        self.declare_parameter('encoder_noise_omega', 0.05)   # ~0.05 rad/s uncertainty
 
         # IMU measurement noise (gyro -> omega)
-        self.declare_parameter('imu_noise_omega', 0.05)
+        # This should reflect IMU gyroscope accuracy
+        self.declare_parameter('imu_noise_omega', 0.02)       # IMUs are often more accurate
 
         self.prediction_rate = self.get_parameter('prediction_rate').value
         initial_x = self.get_parameter('initial_x').value
@@ -144,23 +146,36 @@ class EKFLocalizationTask2(Node):
         # FIXED: Now accepts state (5 vars) + control (2 vars) + dt
         def eval_Gt(x, y, th, v, w, u0, u1, dt):
             """
-            Args:
-                x, y, th, v, w: state variables
-                u0, u1: control inputs (unused in constant velocity model)
-                dt: time step
+            Jacobian G_t w.r.t. state [x, y, theta, v, omega]
+            
+            Motion model:
+            x_new = x + v*cos(theta)*dt
+            y_new = y + v*sin(theta)*dt
+            theta_new = theta + omega*dt
+            v_new = v  (constant)
+            omega_new = omega  (constant)
             """
-            dxdth = -v * np.sin(th) * dt
-            dxdv = np.cos(th) * dt
-
-            dydth = v * np.cos(th) * dt
-            dydv = np.sin(th) * dt
-
+            # Partial derivatives
+            # ∂x_new/∂theta = -v*sin(theta)*dt
+            dx_dtheta = -v * np.sin(th) * dt
+            # ∂x_new/∂v = cos(theta)*dt
+            dx_dv = np.cos(th) * dt
+            
+            # ∂y_new/∂theta = v*cos(theta)*dt
+            dy_dtheta = v * np.cos(th) * dt
+            # ∂y_new/∂v = sin(theta)*dt
+            dy_dv = np.sin(th) * dt
+            
+            # ∂theta_new/∂omega = dt
+            dth_domega = dt
+            
+            # Build 5×5 Jacobian
             return np.array([
-                [1.0, 0.0, dxdth, dxdv, 0.0],
-                [0.0, 1.0, dydth, dydv, 0.0],
-                [0.0, 0.0, 1.0, 0.0, dt],
-                [0.0, 0.0, 0.0, 1.0, 0.0],
-                [0.0, 0.0, 0.0, 0.0, 1.0],
+                [1.0, 0.0, dx_dtheta, dx_dv,      0.0],        # ∂x_new/∂[x,y,θ,v,ω]
+                [0.0, 1.0, dy_dtheta, dy_dv,      0.0],        # ∂y_new/∂[x,y,θ,v,ω]
+                [0.0, 0.0, 1.0,       0.0,        dth_domega], # ∂θ_new/∂[x,y,θ,v,ω]
+                [0.0, 0.0, 0.0,       1.0,        0.0],        # ∂v_new/∂[x,y,θ,v,ω]
+                [0.0, 0.0, 0.0,       0.0,        1.0],        # ∂ω_new/∂[x,y,θ,v,ω]
             ])
 
         # Jacobian wrt control (5x2) – here used only to inject process noise
@@ -372,13 +387,30 @@ class EKFLocalizationTask2(Node):
                 return np.array([r, wrap_angle(b)])
 
             def H_landmark(x, y, th, v, w, lm_x, lm_y):
+                """
+                Jacobian of landmark measurement model w.r.t. state [x,y,θ,v,ω]
+                
+                h = [range, bearing] where:
+                  range = sqrt((lm_x - x)^2 + (lm_y - y)^2)
+                  bearing = atan2(lm_y - y, lm_x - x) - theta
+                """
                 dx = lm_x - x
                 dy = lm_y - y
                 q = dx*dx + dy*dy
                 sq = np.sqrt(q)
+                
+                # Derivatives of range
+                dr_dx = -dx / sq
+                dr_dy = -dy / sq
+                
+                # Derivatives of bearing
+                db_dx = dy / q
+                db_dy = -dx / q
+                db_dtheta = -1.0
+                
                 return np.array([
-                    [-dx/sq, -dy/sq, 0.0, 0.0, 0.0],
-                    [ dy/q,  -dx/q, -1.0, 0.0, 0.0],
+                    [dr_dx, dr_dy, 0.0,       0.0, 0.0],  # ∂range/∂[x,y,θ,v,ω]
+                    [db_dx, db_dy, db_dtheta, 0.0, 0.0],  # ∂bearing/∂[x,y,θ,v,ω]
                 ])
 
             def residual_landmark(z, z_hat, angle_idx=1):
