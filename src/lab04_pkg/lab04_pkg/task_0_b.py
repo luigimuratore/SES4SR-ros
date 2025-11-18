@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.patches import Arc
 
-from models.landmark_model import (
+from .models.landmark_model import (
     landmark_range_bearing_sensor,
     landmark_model_prob,
     plot_sampled_poses,

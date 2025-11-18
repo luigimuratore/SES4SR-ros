@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from  matplotlib.patches import Arc
-from utils import compute_p_hit_dist
+from .utils import compute_p_hit_dist
 arrow = u'$\u2191$'
 
 def landmark_range_bearing_sensor(robot_pose, landmark, sigma, max_range=6.0, fov=math.pi/2):

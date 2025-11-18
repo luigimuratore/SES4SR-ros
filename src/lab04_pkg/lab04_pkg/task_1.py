@@ -1,26 +1,19 @@
 import os
 import yaml
 import numpy as np
-
 import rclpy
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
-
 from nav_msgs.msg import Odometry
 from landmark_msgs.msg import LandmarkArray
+
 from lab04_pkg.models.ekf import RobotEKF
+from lab04_pkg.models.utils import normalize_angle, residual
+from lab04_pkg.models.probabilistic_models import landmark_range_bearing_model
+from lab04_pkg.task_0_b import compute_jacobians
 
 
-def wrap_angle(angle):
-    """Normalize angle to [-pi, pi]."""
-    return np.arctan2(np.sin(angle), np.cos(angle))
-
-
-class EKFLocalizationNode(Node):
-    """
-    ROS 2 Node for EKF-based robot localization using landmarks.
-    """
-
+class Task_1(Node): #Node for EKF-based robot localization using landmarks
     def __init__(self):
         super().__init__('task_1')
 
@@ -60,19 +53,8 @@ class EKFLocalizationNode(Node):
         self.last_prediction_time = self.get_clock().now()
 
         # Subscribers
-        self.odom_sub = self.create_subscription(
-            Odometry,
-            '/odom',
-            self.odom_callback,
-            10
-        )
-
-        self.landmark_sub = self.create_subscription(
-            LandmarkArray,
-            '/landmarks',  # '/camera/landmarks' on real robot
-            self.landmark_callback,
-            10
-        )
+        self.odom_sub = self.create_subscription(Odometry,'/odom',self.odom_callback,10)
+        self.landmark_sub = self.create_subscription(LandmarkArray,'/landmarks', self.landmark_callback,10) # '/camera/landmarks' on real robot
 
         # Publisher
         self.ekf_pub = self.create_publisher(Odometry, '/ekf', 10)
@@ -85,13 +67,11 @@ class EKFLocalizationNode(Node):
         self.get_logger().info('EKF Localization Node initialized')
         self.get_logger().info(f'Prediction rate: {self.prediction_rate} Hz')
 
-    # ---------------- EKF setup ----------------
 
-    def _initialize_ekf(self, x, y, theta):
-        """Initialize EKF with motion model and Jacobians."""
+    # EKF
+    def _initialize_ekf(self, x, y, theta): #EKF with motion model and Jacobians
 
-        # Motion model g(mu, u): unicycle, discretized
-        def eval_gux(mu, u, sigma_u, dt):
+        def eval_gux(mu, u, sigma_u, dt): # Motion model g(mu, u)
             x, y, th = mu
             v, w = u
 
@@ -107,7 +87,7 @@ class EKFLocalizationNode(Node):
                 x_new = x + v * np.cos(th) * dt
                 y_new = y + v * np.sin(th) * dt
 
-            th_new = wrap_angle(th_new)
+            th_new = normalize_angle(th_new)
             return np.array([x_new, y_new, th_new])
 
         # Jacobian wrt state
@@ -173,60 +153,37 @@ class EKFLocalizationNode(Node):
             f'EKF initialized at [{x:.2f}, {y:.2f}, {theta:.2f}]'
         )
 
-    def _load_landmarks(self):
-        """Load landmark positions from YAML."""
-        try:
-            # Prefer local config, then fallback
-            package_share = get_package_share_directory('lab04_pkg')
-            yaml_file = os.path.join(package_share, 'config', 'landmarks.yaml')
+    def _load_landmarks(self): #Load landmark positions from YAML
+        package_share = get_package_share_directory('lab04_pkg')
+        yaml_file = os.path.join(package_share, 'config', 'landmarks.yaml')
+        self.get_logger().info(f'Loading landmarks from: {yaml_file}')
 
-            if not os.path.exists(yaml_file):
-                package_share = get_package_share_directory('turtlebot3_perception')
-                yaml_file = os.path.join(package_share, 'config', 'landmarks.yaml')
+        with open(yaml_file, 'r') as f:
+            data = yaml.safe_load(f)
 
-            self.get_logger().info(f'Loading landmarks from: {yaml_file}')
+        lm_data = data['landmarks']
+        ids = lm_data['id']
+        xs = lm_data['x']
+        ys = lm_data['y']
 
-            with open(yaml_file, 'r') as f:
-                data = yaml.safe_load(f)
+        landmarks = {}
+        for i in range(len(ids)):
+            landmarks[ids[i]] = np.array([xs[i], ys[i]])
+            self.get_logger().info(
+                f'  Landmark {ids[i]}: ({xs[i]:.2f}, {ys[i]:.2f})'
+            )
 
-            lm_data = data['landmarks']
-            ids = lm_data['id']
-            xs = lm_data['x']
-            ys = lm_data['y']
+        return landmarks
 
-            landmarks = {}
-            for i in range(len(ids)):
-                landmarks[ids[i]] = np.array([xs[i], ys[i]])
-                self.get_logger().info(
-                    f'  Landmark {ids[i]}: ({xs[i]:.2f}, {ys[i]:.2f})'
-                )
+     
 
-            return landmarks
+    # CALLBACKS
 
-        except Exception as e:
-            self.get_logger().error(f'Could not load landmarks from yaml: {e}')
-            self.get_logger().warn('Using default landmark positions')
-            return {
-                11: np.array([-1.1, -1.1]),
-                12: np.array([-1.1,  0.0]),
-                13: np.array([-1.1,  1.1]),
-                21: np.array([ 0.0, -1.1]),
-                22: np.array([ 0.0,  0.0]),
-                23: np.array([ 0.0,  1.1]),
-                31: np.array([ 1.1, -1.1]),
-                32: np.array([ 1.1,  0.0]),
-                33: np.array([ 1.1,  1.1]),
-            }
-
-    # ---------------- Callbacks ----------------
-
-    def odom_callback(self, msg: Odometry):
-        """Store latest linear and angular velocity from /odom."""
+    def odom_callback(self, msg: Odometry): #Store latest linear and angular velocity from /odom
         self.last_v = msg.twist.twist.linear.x
         self.last_omega = msg.twist.twist.angular.z
 
-    def prediction_callback(self):
-        """EKF prediction step, called at fixed rate."""
+    def prediction_callback(self): #EKF prediction step, called at fixed rate
         now = self.get_clock().now()
         dt = (now - self.last_prediction_time).nanoseconds * 1e-9
         if dt <= 0.0:
@@ -253,8 +210,7 @@ class EKFLocalizationNode(Node):
 
         self._publish_state()
 
-    def landmark_callback(self, msg: LandmarkArray):
-        """EKF update for each landmark measurement."""
+    def landmark_callback(self, msg: LandmarkArray): # EKF update for each landmark measurement
         if not msg.landmarks:
             return
 
@@ -273,14 +229,15 @@ class EKFLocalizationNode(Node):
             sigma_before = np.sqrt(np.diag(self.ekf.Sigma))
 
             try:
+                # Use compute_jacobians from task_0_b
                 self.ekf.update(
                     z=z,
-                    eval_hx=self._eval_hx,
-                    eval_Ht=self._eval_Ht,
+                    eval_hx=lambda x, y, th, lx, ly: landmark_range_bearing_model(np.array([x, y, th]), np.array([lx, ly]), sigma=[0.0, 0.0]),
+                    eval_Ht=lambda x, y, th, lx, ly: compute_jacobians(np.array([x, y, th]), np.array([lx, ly])),
                     Qt=self.Qt,
                     hx_args=(*self.ekf.mu, lm_x, lm_y),
                     Ht_args=(*self.ekf.mu, lm_x, lm_y),
-                    residual=self._residual,
+                    residual=residual,
                     angle_idx=1
                 )
             except Exception as e:
@@ -302,50 +259,15 @@ class EKFLocalizationNode(Node):
         if num_updates > 0:
             self.get_logger().info(
                 f'AFTER UPDATES: μ = [{self.ekf.mu[0]:.3f}, '
-                f'{self.ekf.mu[1]:.3f}, {np.degrees(self.ekf.mu[2]):.1f}°], '
+                f'{self.ekf.mu[1]:.3f}, {np.degrees(self.ekf.mu[2]):.1f}° ({self.ekf.mu[2]:.3f} rad)], '
                 f'σx={np.sqrt(self.ekf.Sigma[0,0]):.3f}, '
                 f'σy={np.sqrt(self.ekf.Sigma[1,1]):.3f}'
             )
 
         self._publish_state()
 
-    # ---------------- Measurement model helpers ----------------
 
-    @staticmethod
-    def _eval_hx(x, y, theta, lm_x, lm_y):
-        """Measurement model h(x): [range, bearing]."""
-        dx = lm_x - x
-        dy = lm_y - y
-        q = dx ** 2 + dy ** 2
-
-        r = np.sqrt(q)
-        bearing = np.arctan2(dy, dx) - theta
-        bearing = wrap_angle(bearing)
-
-        return np.array([r, bearing])
-
-    @staticmethod
-    def _eval_Ht(x, y, theta, lm_x, lm_y):
-        """Jacobian of measurement model wrt state."""
-        dx = lm_x - x
-        dy = lm_y - y
-        q = dx ** 2 + dy ** 2
-        sqrt_q = np.sqrt(q)
-
-        return np.array([
-            [-dx / sqrt_q, -dy / sqrt_q, 0.0],
-            [dy / q,       -dx / q,     -1.0]
-        ])
-
-    @staticmethod
-    def _residual(z, z_pred, angle_idx=1):
-        """Innovation with angle wrapping on bearing."""
-        res = z - z_pred
-        res[angle_idx] = wrap_angle(res[angle_idx])
-        return res
-
-    # ---------------- Publishing ----------------
-
+    # PUBLISHING 
     def _publish_state(self):
         """Publish EKF state as Odometry on /ekf."""
         msg = Odometry()
@@ -379,7 +301,7 @@ class EKFLocalizationNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = EKFLocalizationNode()
+    node = Task_1()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

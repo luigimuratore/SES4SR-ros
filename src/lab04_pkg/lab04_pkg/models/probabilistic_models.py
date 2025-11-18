@@ -1,7 +1,7 @@
 import math
 import numpy as np
-from Sensors_Models.utils import compute_p_hit_dist
-from Discrete_Filters.utils import normalize_angle
+from .utils import compute_p_hit_dist
+from .utils import normalize_angle
 
 def sample_velocity_motion_model(x, u, a, dt):
     """Sample velocity motion model.
