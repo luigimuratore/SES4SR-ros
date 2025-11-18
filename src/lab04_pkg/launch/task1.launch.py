@@ -3,14 +3,11 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """
-    Launch EKF localization node for Lab 4 Task 1.
-    """
 
-    ekf_node = Node(
+    task_1 = Node(
         package='lab04_pkg',
-        executable='task1',          
-        name='ekf_localization',
+        executable='task_1',          
+        name='task_1',
         output='screen',
         parameters=[{
             'prediction_rate': 20.0,
@@ -24,4 +21,4 @@ def generate_launch_description():
         }]
     )
 
-    return LaunchDescription([ekf_node])
+    return LaunchDescription([task_1])
