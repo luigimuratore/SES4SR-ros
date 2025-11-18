@@ -11,8 +11,8 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'prediction_rate': 20.0,
-            'initial_x': 0.0,
-            'initial_y': 0.0,
+            'initial_x': -2.5, # real position x of the robot at start -2.0
+            'initial_y': -0.0, # real position y of the robot at start -0.5
             'initial_theta': 0.0,
             'process_noise_v': 0.1,
             'process_noise_omega': 0.05,

@@ -19,8 +19,8 @@ class Task_1(Node): #Node for EKF-based robot localization using landmarks
 
         # Parameters
         self.declare_parameter('prediction_rate', 20.0)  # Hz
-        self.declare_parameter('initial_x', 0.0)
-        self.declare_parameter('initial_y', 0.0)
+        self.declare_parameter('initial_x', -2.5)
+        self.declare_parameter('initial_y', -0.0)
         self.declare_parameter('initial_theta', 0.0)
         self.declare_parameter('process_noise_v', 0.1)
         self.declare_parameter('process_noise_omega', 0.05)
