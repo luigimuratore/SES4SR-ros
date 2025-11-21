@@ -124,60 +124,96 @@ class EKFLocalizationTask2(Node):
     def _initialize_ekf(self, x0, y0, theta0):
         """Create EKF with state [x, y, theta, v, omega]."""
 
-        # Motion model: constant velocity
+        # --- 1. Motion Model (Exact Unicycle) ---
+        # Matches PDF Eq 61 
         def eval_gux(mu, u, sigma_u, dt):
-            """
-            mu = [x, y, theta, v, w]
-            u is unused (no explicit control in this version).
-            """
             x, y, th, v, w = mu
+            
+            # Check for small omega to avoid division by zero
+            if abs(w) < 1e-5:
+                # Use Euler limit when moving straight
+                x_new = x + v * np.cos(th) * dt
+                y_new = y + v * np.sin(th) * dt
+                th_new = wrap_angle(th + w * dt)
+            else:
+                # Exact integration for curved motion
+                x_new = x + (v/w) * (np.sin(th + w*dt) - np.sin(th))
+                y_new = y + (v/w) * (-np.cos(th + w*dt) + np.cos(th))
+                th_new = wrap_angle(th + w * dt)
 
-            x_new = x + v * np.cos(th) * dt
-            y_new = y + v * np.sin(th) * dt
-            th_new = wrap_angle(th + w * dt)
+            # v and w are state variables that follow a random walk (process noise added later)
+            return np.array([x_new, y_new, th_new, v, w])
 
-            # v, w assumed constant between updates (plus process noise)
-            v_new = v
-            w_new = w
-
-            return np.array([x_new, y_new, th_new, v_new, w_new])
-
-        # Jacobian wrt state (5x5)
-        # FIXED: Now accepts state (5 vars) + control (2 vars) + dt
+        # --- 2. Jacobian Gt (w.r.t State) ---
+        # Matches requirements to compute G matrix [cite: 59, 60]
         def eval_Gt(x, y, th, v, w, u0, u1, dt):
-            """
-            Jacobian G_t w.r.t. state [x, y, theta, v, omega]
-            
-            Motion model:
-            x_new = x + v*cos(theta)*dt
-            y_new = y + v*sin(theta)*dt
-            theta_new = theta + omega*dt
-            v_new = v  (constant)
-            omega_new = omega  (constant)
-            """
-            # Partial derivatives
-            # ∂x_new/∂theta = -v*sin(theta)*dt
-            dx_dtheta = -v * np.sin(th) * dt
-            # ∂x_new/∂v = cos(theta)*dt
-            dx_dv = np.cos(th) * dt
-            
-            # ∂y_new/∂theta = v*cos(theta)*dt
-            dy_dtheta = v * np.cos(th) * dt
-            # ∂y_new/∂v = sin(theta)*dt
-            dy_dv = np.sin(th) * dt
-            
-            # ∂theta_new/∂omega = dt
-            dth_domega = dt
-            
-            # Build 5×5 Jacobian
+            if abs(w) < 1e-5:
+                # Jacobian limit for straight line (Euler)
+                return np.array([
+                    [1.0, 0.0, -v*np.sin(th)*dt, np.cos(th)*dt, 0.0],
+                    [0.0, 1.0,  v*np.cos(th)*dt, np.sin(th)*dt, 0.0],
+                    [0.0, 0.0,  1.0,             0.0,           dt ],
+                    [0.0, 0.0,  0.0,             1.0,           0.0],
+                    [0.0, 0.0,  0.0,             0.0,           1.0]
+                ])
+            else:
+                # Jacobian for Exact Unicycle Model
+                # Precompute recurring terms
+                sin_th = np.sin(th)
+                cos_th = np.cos(th)
+                sin_th_wdt = np.sin(th + w*dt)
+                cos_th_wdt = np.cos(th + w*dt)
+                
+                # Derivatives w.r.t theta
+                dx_dth = (v/w) * (cos_th_wdt - cos_th)
+                dy_dth = (v/w) * (sin_th_wdt - sin_th)
+                
+                # Derivatives w.r.t v
+                dx_dv = (1/w) * (sin_th_wdt - sin_th)
+                dy_dv = (1/w) * (-cos_th_wdt + cos_th)
+                
+                # Derivatives w.r.t w (The complex part!)
+                # d(v/w)/dw = -v/w^2
+                term1_x = (-v / (w**2)) * (sin_th_wdt - sin_th)
+                term2_x = (v / w) * (np.cos(th + w*dt) * dt)
+                dx_dw = term1_x + term2_x
+                
+                term1_y = (-v / (w**2)) * (-cos_th_wdt + cos_th)
+                term2_y = (v / w) * (np.sin(th + w*dt) * dt)
+                dy_dw = term1_y + term2_y
+
+                return np.array([
+                    [1.0, 0.0, dx_dth, dx_dv, dx_dw],
+                    [0.0, 1.0, dy_dth, dy_dv, dy_dw],
+                    [0.0, 0.0, 1.0,    0.0,   dt   ],
+                    [0.0, 0.0, 0.0,    1.0,   0.0  ],
+                    [0.0, 0.0, 0.0,    0.0,   1.0  ]
+                ])
+
+        # --- 3. Jacobian Vt (w.r.t Control/Noise) ---
+        def eval_Vt(x, y, th, v, w, u0, u1, dt):
+            # Map process noise directly to v and w
             return np.array([
-                [1.0, 0.0, dx_dtheta, dx_dv,      0.0],        # ∂x_new/∂[x,y,θ,v,ω]
-                [0.0, 1.0, dy_dtheta, dy_dv,      0.0],        # ∂y_new/∂[x,y,θ,v,ω]
-                [0.0, 0.0, 1.0,       0.0,        dth_domega], # ∂θ_new/∂[x,y,θ,v,ω]
-                [0.0, 0.0, 0.0,       1.0,        0.0],        # ∂v_new/∂[x,y,θ,v,ω]
-                [0.0, 0.0, 0.0,       0.0,        1.0],        # ∂ω_new/∂[x,y,θ,v,ω]
+                [0.0, 0.0],
+                [0.0, 0.0],
+                [0.0, 0.0],
+                [1.0, 0.0],
+                [0.0, 1.0]
             ])
 
+        self.ekf = RobotEKF(
+            dim_x=5,
+            dim_u=2,
+            eval_gux=eval_gux,
+            eval_Gt=eval_Gt,
+            eval_Vt=eval_Vt
+        )
+
+        self.ekf.mu = np.array([x0, y0, theta0, 0.0, 0.0])
+        self.ekf.Sigma = np.diag([0.01, 0.01, 0.01, 0.5, 0.5])
+        self.ekf.Mt = np.diag([self.sigma_v_proc**2, self.sigma_w_proc**2])
+        
+        self.get_logger().info(f'EKF Task 2 initialized at [{x0:.2f}, {y0:.2f}, {theta0:.2f}]')
         # Jacobian wrt control (5x2) – here used only to inject process noise
         # FIXED: Now accepts state (5 vars) + control (2 vars) + dt
         def eval_Vt(x, y, th, v, w, u0, u1, dt):
