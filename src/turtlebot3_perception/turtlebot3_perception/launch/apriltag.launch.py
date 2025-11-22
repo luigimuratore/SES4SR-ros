@@ -31,7 +31,7 @@ def generate_launch_description():
                     ("image_rect", "camera/color/image_raw"),
                     ("camera_info", "camera/color/camera_info"),
                 ],
-                parameters=[params["camera"]["apriltag"]],
+                parameters=[params["camera"]["apriltag"]["ros__parameters"]],
                 extra_arguments=[{"use_intra_process_comms": True}],
             ),
         ],
