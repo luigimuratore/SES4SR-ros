@@ -32,7 +32,8 @@ setup(
             'odometry_publisher = rover.odometry_publisher:main',
             'motor_driver = rover.motor_driver:main',
             'lidar_test = rover.lidar_test:main',
-            'imu_node = rover.imu_node:main',            
+            'imu_node = rover.imu_node:main',
+
         ],
     },
 )

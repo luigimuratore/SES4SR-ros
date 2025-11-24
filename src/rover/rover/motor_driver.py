@@ -4,7 +4,7 @@ from geometry_msgs.msg import Twist
 import RPi.GPIO as GPIO
 import time
 
-# --- Motor pin setup (example, adapt to your setup) ---
+# --- Motor pin setup ---
 M1_IN1 = 9
 M1_IN2 = 11
 M2_IN1 = 13
