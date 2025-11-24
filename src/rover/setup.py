@@ -28,7 +28,7 @@ setup(
     entry_points={
         'console_scripts': [
             'controller = rover.controller:main',
-            'arduino_bridge = rover.arduino_bridge:main',
+            'encoder_node = rover.encoder_node:main',
             'odometry_publisher = rover.odometry_publisher:main',
             'motor_driver = rover.motor_driver:main',
             'lidar_test = rover.lidar_test:main',

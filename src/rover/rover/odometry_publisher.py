@@ -15,12 +15,7 @@ class OdometryPublisher(Node):
         self.tf_broadcaster = TransformBroadcaster(self)
         
         # Subscriber to encoder data from arduino_bridge
-        self.encoder_sub = self.create_subscription(
-            String,
-            '/encoder_data',
-            self.encoder_callback,
-            10
-        )
+        self.encoder_sub = self.create_subscription(String,'/encoder_data',self.encoder_callback,10)
         
         # Robot parameters
         self.declare_parameter('wheel_radius', 0.065)  # meters

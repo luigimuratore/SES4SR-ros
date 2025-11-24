@@ -12,18 +12,18 @@ def generate_launch_description():
     )
     
     return LaunchDescription([
-        # Include LiDAR launch file (includes base_link -> laser transform)
+        # Include LiDAR launch file
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(ld19_launch_dir, 'lidar.launch.py')
             )
         ),
         
-        # Arduino bridge
+        # Encoder node
         Node(
             package='rover',
-            executable='arduino_bridge',
-            name='arduino_bridge',
+            executable='encoder_node',
+            name='encoder_node',
             parameters=[{
                 'serial_port': '/dev/ttyUSB0',
                 'baud_rate': 115200
@@ -37,14 +37,63 @@ def generate_launch_description():
             executable='odometry_publisher',
             name='odometry_publisher',
             parameters=[{
-                'wheel_radius': 0.065,      # meters (adjust to your wheel size)
-                'wheel_base': 0.30,         # meters (distance between left/right wheels)
-                'ticks_per_rev': 1600       # encoder ticks per wheel revolution (adjust based on your encoder)
+                'wheel_radius': 0.065,
+                'wheel_base': 0.30,
+                'ticks_per_rev': 1600
+            }],
+            output='screen',
+            remappings=[
+                ('/odom', '/odom_encoder')  # Rename to avoid conflict with EKF output
+            ]
+        ),
+        
+        # IMU node
+        Node(
+            package='rover',
+            executable='imu_node',
+            name='imu_node',
+            parameters=[{
+                'port': '/dev/ttyUSB1',
+                'baud_rate': 115200
             }],
             output='screen'
         ),
         
-        # Controller (INACTIVE by default for safety)
+        # Robot localization EKF
+        Node(
+            package='robot_localization',
+            executable='ekf_node',
+            name='ekf_filter_node',
+            output='screen',
+            parameters=[{
+                'frequency': 30.0,
+                'sensor_timeout': 0.1,
+                'two_d_mode': True,
+                'publish_tf': True,
+                'map_frame': 'map',
+                'odom_frame': 'odom',
+                'base_link_frame': 'base_link',
+                'world_frame': 'odom',
+                
+                # Fuse encoder odometry (x, y, yaw, vx, vy, vyaw)
+                'odom0': '/odom_encoder',
+                'odom0_config': [False, False, False,  # x, y, z position
+                                False, False, False,   # roll, pitch, yaw orientation
+                                True,  True,  False,   # vx, vy, vz velocity
+                                False, False, True,    # vroll, vpitch, vyaw
+                                False, False, False],  # ax, ay, az acceleration
+                
+                # Fuse IMU (orientation and angular velocity)
+                'imu0': '/imu/data_raw',
+                'imu0_config': [False, False, False,   # x, y, z position
+                               False, False, True,     # roll, pitch, yaw orientation
+                               False, False, False,    # vx, vy, vz velocity
+                               False, False, True,     # vroll, vpitch, vyaw
+                               False, False, False],   # ax, ay, az acceleration
+            }]
+        ),
+        
+        # Controller
         Node(
             package='rover',
             executable='controller',
@@ -53,7 +102,7 @@ def generate_launch_description():
                 'max_speed': 0.20,
                 'max_turn_rate': 1.0,
                 'obstacle_threshold': 0.3,
-                'is_active': True  # Set to True when ready to run autonomous navigation
+                'is_active': True
             }],
             output='screen'
         ),
