@@ -1,7 +1,6 @@
 import os
 import yaml
 import numpy as np
-
 import rclpy
 from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
@@ -9,22 +8,14 @@ from ament_index_python.packages import get_package_share_directory
 from nav_msgs.msg import Odometry
 from landmark_msgs.msg import LandmarkArray
 from sensor_msgs.msg import Imu
+from lab04_pkg.models.utils import normalize_angle, residual
 from lab04_pkg.models.ekf import RobotEKF
 
 
-def wrap_angle(angle: float) -> float:
-    """Keep angle in [-pi, pi]."""
-    return np.arctan2(np.sin(angle), np.cos(angle))
-
-
-class EKFLocalizationTask2(Node):
-    """
-    EKF localization (Task 2):
-    State = [x, y, theta, v, omega].
+class Task_2(Node):
+    """ State = [x, y, theta, v, omega].
     - Motion model: constant velocity.
-    - Updates: landmarks, wheel encoders (/odom), IMU (/imu).
-    """
-
+    - Updates: landmarks, wheel encoders (/odom), IMU (/imu)."""
     def __init__(self):
         super().__init__('task_2')
 
@@ -34,7 +25,7 @@ class EKFLocalizationTask2(Node):
         self.declare_parameter('initial_y', 0.0)
         self.declare_parameter('initial_theta', 0.0)
 
-        # Process noise on v, omega (how much we let them drift per step)
+        # Process noise on v, omega (drift in speed/turn rate)
         self.declare_parameter('process_noise_v', 0.05)
         self.declare_parameter('process_noise_omega', 0.05)
 
@@ -55,16 +46,12 @@ class EKFLocalizationTask2(Node):
         initial_x = self.get_parameter('initial_x').value
         initial_y = self.get_parameter('initial_y').value
         initial_theta = self.get_parameter('initial_theta').value
-
         self.sigma_v_proc = self.get_parameter('process_noise_v').value
         self.sigma_w_proc = self.get_parameter('process_noise_omega').value
-
         self.sigma_range = self.get_parameter('measurement_noise_range').value
         self.sigma_bearing = self.get_parameter('measurement_noise_bearing').value
-
         self.sigma_v_enc = self.get_parameter('encoder_noise_v').value
         self.sigma_w_enc = self.get_parameter('encoder_noise_omega').value
-
         self.sigma_w_imu = self.get_parameter('imu_noise_omega').value
 
         # Precompute some measurement covariances
@@ -81,51 +68,23 @@ class EKFLocalizationTask2(Node):
         self.last_prediction_time = self.get_clock().now()
         self._prediction_count = 0
 
-        # ---- Subscriptions ----
-        # Encoders: we use odometry twist as encoder measurement (v, omega)
-        self.odom_sub = self.create_subscription(
-            Odometry,
-            '/odom',
-            self.odom_callback,
-            10
-        )
 
-        # Landmarks: range + bearing measurements
-        self.landmark_sub = self.create_subscription(
-            LandmarkArray,
-            '/landmarks',
-            self.landmark_callback,
-            10
-        )
+        # Subscriptions
+        self.odom_sub = self.create_subscription(Odometry,'/odom',self.odom_callback,10)  # Encoders: we use odometry twist as encoder measurement (v, omega)
+        self.landmark_sub = self.create_subscription(LandmarkArray,'/landmarks',self.landmark_callback,10) # Landmarks: range + bearing measurements
+        self.imu_sub = self.create_subscription(Imu,'/imu',self.imu_callback,10) # IMU: angular velocity around z
 
-        # IMU: angular velocity around z
-        self.imu_sub = self.create_subscription(
-            Imu,
-            '/imu',
-            self.imu_callback,
-            10
-        )
-
-        # ---- Publisher ----
+        # Publisher
         self.ekf_pub = self.create_publisher(Odometry, '/ekf', 10)
-
-        # ---- Prediction timer ----
-        self.timer = self.create_timer(
-            1.0 / self.prediction_rate,
-            self.prediction_callback
-        )
+        self.timer = self.create_timer(1.0 / self.prediction_rate,self.prediction_callback)
 
         self.get_logger().info('EKF Task 2 node initialized')
 
-    # -----------------------------------------------------------
+
+
     # EKF init + motion model
-    # -----------------------------------------------------------
-
-    def _initialize_ekf(self, x0, y0, theta0):
-        """Create EKF with state [x, y, theta, v, omega]."""
-
-        # --- 1. Motion Model (Exact Unicycle) ---
-        # Matches PDF Eq 61 
+    def _initialize_ekf(self, x0, y0, theta0): 
+        # 1. Motion model g(u,x)
         def eval_gux(mu, u, sigma_u, dt):
             x, y, th, v, w = mu
             
@@ -134,18 +93,17 @@ class EKFLocalizationTask2(Node):
                 # Use Euler limit when moving straight
                 x_new = x + v * np.cos(th) * dt
                 y_new = y + v * np.sin(th) * dt
-                th_new = wrap_angle(th + w * dt)
+                th_new = normalize_angle(th + w * dt)
             else:
                 # Exact integration for curved motion
                 x_new = x + (v/w) * (np.sin(th + w*dt) - np.sin(th))
                 y_new = y + (v/w) * (-np.cos(th + w*dt) + np.cos(th))
-                th_new = wrap_angle(th + w * dt)
+                th_new = normalize_angle(th + w * dt)
 
             # v and w are state variables that follow a random walk (process noise added later)
             return np.array([x_new, y_new, th_new, v, w])
 
-        # --- 2. Jacobian Gt (w.r.t State) ---
-        # Matches requirements to compute G matrix [cite: 59, 60]
+        # 2. Jacobian Gt (w.r.t State)
         def eval_Gt(x, y, th, v, w, u0, u1, dt):
             if abs(w) < 1e-5:
                 # Jacobian limit for straight line (Euler)
@@ -157,8 +115,6 @@ class EKFLocalizationTask2(Node):
                     [0.0, 0.0,  0.0,             0.0,           1.0]
                 ])
             else:
-                # Jacobian for Exact Unicycle Model
-                # Precompute recurring terms
                 sin_th = np.sin(th)
                 cos_th = np.cos(th)
                 sin_th_wdt = np.sin(th + w*dt)
@@ -172,7 +128,7 @@ class EKFLocalizationTask2(Node):
                 dx_dv = (1/w) * (sin_th_wdt - sin_th)
                 dy_dv = (1/w) * (-cos_th_wdt + cos_th)
                 
-                # Derivatives w.r.t w (The complex part!)
+                # Derivatives w.r.t w 
                 # d(v/w)/dw = -v/w^2
                 term1_x = (-v / (w**2)) * (sin_th_wdt - sin_th)
                 term2_x = (v / w) * (np.cos(th + w*dt) * dt)
@@ -190,7 +146,7 @@ class EKFLocalizationTask2(Node):
                     [0.0, 0.0, 0.0,    0.0,   1.0  ]
                 ])
 
-        # --- 3. Jacobian Vt (w.r.t Control/Noise) ---
+        # 3. Jacobian Vt (w.r.t Control/Noise)
         def eval_Vt(x, y, th, v, w, u0, u1, dt):
             # Map process noise directly to v and w
             return np.array([
@@ -214,105 +170,36 @@ class EKFLocalizationTask2(Node):
         self.ekf.Mt = np.diag([self.sigma_v_proc**2, self.sigma_w_proc**2])
         
         self.get_logger().info(f'EKF Task 2 initialized at [{x0:.2f}, {y0:.2f}, {theta0:.2f}]')
-        # Jacobian wrt control (5x2) – here used only to inject process noise
-        # FIXED: Now accepts state (5 vars) + control (2 vars) + dt
-        def eval_Vt(x, y, th, v, w, u0, u1, dt):
-            """
-            We don't use a real control input, but we still want process noise
-            to affect v and w. So we map control-noise directly into v,w.
-            
-            Args:
-                x, y, th, v, w: state variables
-                u0, u1: control inputs (used as noise injection)
-                dt: time step
-            """
-            return np.array([
-                [0.0, 0.0],  # x
-                [0.0, 0.0],  # y
-                [0.0, 0.0],  # theta
-                [1.0, 0.0],  # v
-                [0.0, 1.0],  # w
-            ])
-
-        # Build EKF object
-        self.ekf = RobotEKF(
-            dim_x=5,
-            dim_u=2,              # virtual "noise inputs"
-            eval_gux=eval_gux,
-            eval_Gt=eval_Gt,
-            eval_Vt=eval_Vt
-        )
-
-        # Initial state
-        self.ekf.mu = np.array([x0, y0, theta0, 0.0, 0.0])
-
-        # Initial covariance (pose quite certain, v/w more uncertain)
-        self.ekf.Sigma = np.diag([
-            0.01,    # x
-            0.01,    # y
-            0.01,    # theta
-            0.5,     # v
-            0.5      # w
-        ])
-
-        # Process noise on "virtual control"
-        self.ekf.Mt = np.diag([
-            self.sigma_v_proc**2,
-            self.sigma_w_proc**2
-        ])
         
-        self.get_logger().info(f'EKF Task 2 initialized at [{x0:.2f}, {y0:.2f}, {theta0:.2f}]')
 
-    # -----------------------------------------------------------
-    # Landmarks config
-    # -----------------------------------------------------------
-
+    # Landmarks 
     def _load_landmarks(self):
-        """Load {id: (x,y)} from YAML or fallback grid."""
-        try:
-            pkg_share = get_package_share_directory('lab04_pkg')
+        pkg_share = get_package_share_directory('lab04_pkg')
+        yaml_file = os.path.join(pkg_share, 'config', 'landmarks.yaml')
+        if not os.path.exists(yaml_file):
+            pkg_share = get_package_share_directory('turtlebot3_perception')
             yaml_file = os.path.join(pkg_share, 'config', 'landmarks.yaml')
-            if not os.path.exists(yaml_file):
-                pkg_share = get_package_share_directory('turtlebot3_perception')
-                yaml_file = os.path.join(pkg_share, 'config', 'landmarks.yaml')
 
-            with open(yaml_file, 'r') as f:
-                data = yaml.safe_load(f)
+        with open(yaml_file, 'r') as f:
+            data = yaml.safe_load(f)
 
-            lm = data['landmarks']
-            ids = lm['id']
-            xs = lm['x']
-            ys = lm['y']
+        lm = data['landmarks']
+        ids = lm['id']
+        xs = lm['x']
+        ys = lm['y']
 
-            landmarks = {}
-            for i in range(len(ids)):
-                landmarks[ids[i]] = np.array([xs[i], ys[i]])
-                self.get_logger().info(
-                    f"Landmark {ids[i]}: ({xs[i]:.2f}, {ys[i]:.2f})"
-                )
-            return landmarks
+        landmarks = {}
+        for i in range(len(ids)):
+            landmarks[ids[i]] = np.array([xs[i], ys[i]])
+            self.get_logger().info(
+                f"Landmark {ids[i]}: ({xs[i]:.2f}, {ys[i]:.2f})"
+            )
+        return landmarks
 
-        except Exception as e:
-            self.get_logger().error(f"Could not load landmarks.yaml: {e}")
-            self.get_logger().warn("Using default 3x3 grid.")
-            return {
-                11: np.array([-1.1, -1.1]),
-                12: np.array([-1.1,  0.0]),
-                13: np.array([-1.1,  1.1]),
-                21: np.array([ 0.0, -1.1]),
-                22: np.array([ 0.0,  0.0]),
-                23: np.array([ 0.0,  1.1]),
-                31: np.array([ 1.1, -1.1]),
-                32: np.array([ 1.1,  0.0]),
-                33: np.array([ 1.1,  1.1]),
-            }
 
-    # -----------------------------------------------------------
+
     # Prediction
-    # -----------------------------------------------------------
-
     def prediction_callback(self):
-        """Periodic EKF prediction step."""
         now = self.get_clock().now()
         dt = (now - self.last_prediction_time).nanoseconds * 1e-9
         self.last_prediction_time = now
@@ -330,16 +217,14 @@ class EKFLocalizationTask2(Node):
         if self._prediction_count % int(self.prediction_rate) == 0:
             x, y, th, v, w = self.ekf.mu
             self.get_logger().info(
-                f"PRED: x={x:.2f}, y={y:.2f}, th={np.degrees(th):.1f}°, "
+                f"PRED: x={x:.2f}, y={y:.2f}, th={np.degrees(th):.1f}° ({th:.3f} rad), "
                 f"v={v:.2f}, w={w:.2f}"
             )
 
         self._publish_state()
 
-    # -----------------------------------------------------------
-    # Encoders (/odom) -> v, omega measurement
-    # -----------------------------------------------------------
 
+    # Encoders (/odom) -> v, omega measurement
     def odom_callback(self, msg: Odometry):
         """Use /odom twist as encoder-like measurement of v and omega."""
         v_meas = msg.twist.twist.linear.x
@@ -369,10 +254,8 @@ class EKFLocalizationTask2(Node):
 
         self._publish_state()
 
-    # -----------------------------------------------------------
-    # IMU (/imu) -> omega measurement
-    # -----------------------------------------------------------
 
+    # IMU (/imu) -> omega measurement
     def imu_callback(self, msg: Imu):
         """Use IMU gyro z as measurement of omega."""
         w_meas = msg.angular_velocity.z
@@ -398,12 +281,10 @@ class EKFLocalizationTask2(Node):
 
         self._publish_state()
 
-    # -----------------------------------------------------------
-    # Landmarks update (same idea as Task 1, extended state)
-    # -----------------------------------------------------------
 
-    def landmark_callback(self, msg: LandmarkArray):
-        """Update with range/bearing to known landmarks."""
+
+    # Landmarks update (same as Task 1, extended state)
+    def landmark_callback(self, msg: LandmarkArray): #Update with range/bearing to known landmarks
         if not msg.landmarks:
             return
 
@@ -420,12 +301,10 @@ class EKFLocalizationTask2(Node):
                 dy = lm_y - y
                 r = np.sqrt(dx*dx + dy*dy)
                 b = np.arctan2(dy, dx) - th
-                return np.array([r, wrap_angle(b)])
+                return np.array([r, normalize_angle(b)])
 
             def H_landmark(x, y, th, v, w, lm_x, lm_y):
-                """
-                Jacobian of landmark measurement model w.r.t. state [x,y,θ,v,ω]
-                
+                """ Jacobian of landmark measurement model w.r.t. state [x,y,θ,v,ω]
                 h = [range, bearing] where:
                   range = sqrt((lm_x - x)^2 + (lm_y - y)^2)
                   bearing = atan2(lm_y - y, lm_x - x) - theta
@@ -451,7 +330,7 @@ class EKFLocalizationTask2(Node):
 
             def residual_landmark(z, z_hat, angle_idx=1):
                 res = z - z_hat
-                res[angle_idx] = wrap_angle(res[angle_idx])
+                res[angle_idx] = normalize_angle(res[angle_idx])
                 return res
 
             try:
@@ -470,12 +349,9 @@ class EKFLocalizationTask2(Node):
 
         self._publish_state()
 
-    # -----------------------------------------------------------
+   
     # Publish /ekf
-    # -----------------------------------------------------------
-
-    def _publish_state(self):
-        """Publish EKF state as nav_msgs/Odometry on /ekf."""
+    def _publish_state(self): #Publish EKF state as nav_msgs/Odometry on /ekf
         msg = Odometry()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'odom'
@@ -509,7 +385,7 @@ class EKFLocalizationTask2(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = EKFLocalizationTask2()
+    node = Task_2()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
@@ -517,7 +393,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()

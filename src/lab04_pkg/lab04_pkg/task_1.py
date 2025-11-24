@@ -150,8 +150,7 @@ class Task_1(Node): #Node for EKF-based robot localization using landmarks
         self.ekf.Mt = np.diag([self.sigma_v ** 2, self.sigma_omega ** 2])
 
         self.get_logger().info(
-            f'EKF initialized at [{x:.2f}, {y:.2f}, {theta:.2f}]'
-        )
+            f'EKF initialized at [{x:.2f}, {y:.2f}, {theta:.2f}]')
 
     def _load_landmarks(self): #Load landmark positions from YAML
         package_share = get_package_share_directory('lab04_pkg')
