@@ -5,6 +5,9 @@ from nav_msgs.msg import Odometry
 from sensor_msgs.msg import LaserScan, Imu
 import math
 import tf_transformations
+import signal
+import sys
+import time
 
 class Controller(Node):
     def __init__(self):
@@ -25,12 +28,12 @@ class Controller(Node):
         self.get_logger().info(f'Parameters loaded: max_speed={self.max_speed}, max_turn_rate={self.max_turn_rate}, is_active={self.is_active}')
 
         # Subscriptions
-        self.odom_sub = self.create_subscription(Odometry, '/odometry/filtered', self.odom_callback, 10)  # Changed from /odom_encoder
+        self.odom_sub = self.create_subscription(Odometry, '/odometry/filtered', self.odom_callback, 10)
         self.imu_sub = self.create_subscription(Imu, '/imu/data_raw', self.imu_callback, 10)
         self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
         
         # Control timer
-        self.timer = self.create_timer(0.1, self.timer_callback)  # 10Hz
+        self.timer = self.create_timer(0.1, self.timer_callback)
 
         # Obstacle detection
         self.closest_range_front = float('inf')
@@ -243,17 +246,46 @@ class Controller(Node):
         cmd.angular.z = 0.0
         self.publisher_.publish(cmd)
 
+    def emergency_stop(self):
+        """Emergency stop - send multiple stop commands"""
+        print('EMERGENCY STOP - Stopping motors!')
+        cmd = Twist()
+        cmd.linear.x = 0.0
+        cmd.angular.z = 0.0
+        
+        # Send stop command 10 times
+        for i in range(10):
+            self.publisher_.publish(cmd)
+            time.sleep(0.02)
+        
+        print('Motors stopped!')
+
 def main(args=None):
     rclpy.init(args=args)
     node = Controller()
     
+    def signal_handler(sig, frame):
+        """Handle CTRL+C before ROS2 shuts down"""
+        print('\n⚠️  CTRL+C detected! Stopping robot...')
+        node.emergency_stop()
+        print('✓ Safe to exit now')
+        
+        # Now shutdown ROS2
+        node.destroy_node()
+        rclpy.shutdown()
+        sys.exit(0)
+    
+    # Register signal handler
+    signal.signal(signal.SIGINT, signal_handler)
+    
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
-        node.get_logger().info('Shutting down controller')
+        pass
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

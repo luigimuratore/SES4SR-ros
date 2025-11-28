@@ -33,6 +33,7 @@ setup(
             'motor_driver = rover.motor_driver:main',
             'lidar_test = rover.lidar_test:main',
             'imu_node = rover.imu_node:main',
+            'odom_node = rover.odom_node:main',
 
         ],
     },
