@@ -15,17 +15,21 @@ class Controller(Node):
         self.publisher_ = self.create_publisher(Twist, '/cmd_vel', 10)
 
         # declare parameters
-        self.declare_parameter('max_speed', 0.2)
-        self.declare_parameter('max_turn_rate', 1.0)
-        self.declare_parameter('obstacle_threshold', 0.3)
+        self.declare_parameter('max_speed', 0.15)
+        self.declare_parameter('max_turn_rate', 0.8)
+        self.declare_parameter('obstacle_threshold', 0.4)
         self.declare_parameter('is_active', True)
+        self.declare_parameter('turn_tolerance', 0.2)  # 11.5° tolerance
 
         self.max_speed = self.get_parameter('max_speed').value
         self.max_turn_rate = self.get_parameter('max_turn_rate').value
         self.obstacle_threshold = self.get_parameter('obstacle_threshold').value
         self.is_active = self.get_parameter('is_active').value
+        self.turn_tolerance = self.get_parameter('turn_tolerance').value
         
-        self.get_logger().info(f'Parameters loaded: max_speed={self.max_speed}, max_turn_rate={self.max_turn_rate}, is_active={self.is_active}')
+        self.get_logger().info(f'Parameters loaded: max_speed={self.max_speed}, '
+                              f'max_turn_rate={self.max_turn_rate}, '
+                              f'turn_tolerance={math.degrees(self.turn_tolerance):.1f}°')
 
         # Subscriptions
         self.odom_sub = self.create_subscription(Odometry, '/odometry/filtered', self.odom_callback, 10)
@@ -40,7 +44,7 @@ class Controller(Node):
         self.closest_range_left = float('inf')
         self.closest_range_right = float('inf')
         
-        # Odometry tracking (fused from encoder + IMU)
+        # Odometry tracking (IMU-based yaw from EKF)
         self.x = 0.0
         self.y = 0.0
         self.yaw = 0.0
@@ -55,32 +59,32 @@ class Controller(Node):
         self.scan_received = False
         self.odom_timeout = 2.0
         
-        # State machine for obstacle avoidance
+        # State machine
         self.state = 'FORWARD'
         self.turn_target_yaw = None
-        self.turn_tolerance = 0.15
+        self.turn_start_yaw = None
+        
+        # Post-turn cooldown (from lab03) - prevents rapid re-triggering
+        self.post_turn_deadline = 0.0
         
         self.get_logger().info('Controller initialized and ready')
-        self.get_logger().info('Waiting for encoder, IMU, and scan data...')
 
     def odom_callback(self, msg):
-        """Extract position and linear velocity from encoder odometry"""
+        """Extract position and yaw from fused odometry (encoder + IMU)"""
         if not self.odom_received:
-            self.get_logger().info('First encoder odometry message received!')
+            self.get_logger().info('First filtered odometry received!')
             self.odom_received = True
             
         self.last_odom_time = self.get_clock().now()
         
-        # Update position from encoders
         self.x = msg.pose.pose.position.x
         self.y = msg.pose.pose.position.y
         
-        # Get yaw from encoder odometry
+        # Get yaw from fused odometry (IMU-based) - corrects for wheel slip!
         q = msg.pose.pose.orientation
         quat_list = [q.x, q.y, q.z, q.w]
         _, _, self.yaw = tf_transformations.euler_from_quaternion(quat_list)
         
-        # Linear velocity from encoders
         self.linear_velocity = msg.twist.twist.linear.x
 
     def imu_callback(self, msg):
@@ -90,23 +94,22 @@ class Controller(Node):
             self.imu_received = True
             
         self.last_imu_time = self.get_clock().now()
-        
-        # Angular velocity from IMU (more accurate than encoders)
         self.angular_velocity = msg.angular_velocity.z
 
     def scan_callback(self, msg):
-        """Process LiDAR data to detect obstacles"""
+        """Process LiDAR data"""
         if not self.scan_received:
-            self.get_logger().info(f'First scan message received! {len(msg.ranges)} points')
+            self.get_logger().info(f'First scan received! {len(msg.ranges)} points')
             self.scan_received = True
             
         if len(msg.ranges) == 0:
             return
         
-        # Calculate angle increment
-        num_readings = len(msg.ranges)
+        # Check cooldown period (from lab03)
+        now = self.get_clock().now().nanoseconds / 1e9
+        if now < self.post_turn_deadline:
+            return
         
-        # Define sectors
         front_ranges = []
         left_ranges = []
         right_ranges = []
@@ -115,11 +118,9 @@ class Controller(Node):
             if math.isinf(r) or math.isnan(r) or r < msg.range_min or r > msg.range_max:
                 continue
             
-            # Calculate angle for this reading
             angle = msg.angle_min + i * msg.angle_increment
             angle_deg = math.degrees(angle)
             
-            # Classify into sectors
             if -30 <= angle_deg <= 30:
                 front_ranges.append(r)
             elif 30 < angle_deg <= 90:
@@ -127,117 +128,136 @@ class Controller(Node):
             elif -90 <= angle_deg < -30:
                 right_ranges.append(r)
         
-        # Find minimum distances
         self.closest_range_front = min(front_ranges) if front_ranges else float('inf')
         self.closest_range_left = min(left_ranges) if left_ranges else float('inf')
         self.closest_range_right = min(right_ranges) if right_ranges else float('inf')
+        
+        # Trigger turn if obstacle detected while FORWARD
+        if self.state == 'FORWARD' and self.closest_range_front < self.obstacle_threshold:
+            if self.yaw is None:
+                self.get_logger().warn('Obstacle detected but no odometry yet')
+                return
+            
+            # Determine turn direction
+            turn_direction = -1 if self.closest_range_left > self.closest_range_right else 1
+            
+            # Record starting yaw
+            self.turn_start_yaw = self.yaw
+            
+            # Calculate target with cardinal snapping (key feature from lab03!)
+            nominal_target = self.yaw + (math.pi / 2.0 * turn_direction)
+            self.turn_target_yaw = self._snap_to_cardinal_yaw(nominal_target)
+            
+            self.state = 'TURN'
+            
+            direction_str = "LEFT (+90°)" if turn_direction == 1 else "RIGHT (-90°)"
+            self.get_logger().info(
+                f'Obstacle at {self.closest_range_front:.2f}m! '
+                f'Turning {direction_str} from {math.degrees(self.yaw):.1f}° '
+                f'to {math.degrees(self.turn_target_yaw):.1f}° (snapped)'
+            )
 
-    def _determine_clearest_side(self):
-        """Determine which side has more clearance"""
-        if self.closest_range_left > self.closest_range_right:
-            return 'RIGHT'
-        else:
-            return 'LEFT'
+    def _snap_to_cardinal_yaw(self, yaw):
+        """Snap to nearest cardinal direction (0°, 90°, 180°, -90°)
+        This prevents drift accumulation from lab03"""
+        normalized_yaw = self._normalize_angle(yaw)
+        step = math.pi / 2.0  # 90 degrees
+        
+        # Round to nearest multiple of 90°
+        N = round(normalized_yaw / step)
+        snapped_yaw = N * step
+        
+        return self._normalize_angle(snapped_yaw)
 
     def _normalize_angle(self, angle):
         """Normalize angle to [-pi, pi]"""
-        while angle > math.pi:
-            angle -= 2 * math.pi
-        while angle < -math.pi:
-            angle += 2 * math.pi
-        return angle
+        return math.atan2(math.sin(angle), math.cos(angle))
 
     def _shortest_angular_dist(self, from_angle, to_angle):
-        """Calculate shortest angular distance between two angles"""
+        """Calculate shortest angular distance"""
         diff = to_angle - from_angle
         return self._normalize_angle(diff)
 
     def timer_callback(self):
         """Main control loop"""
-        # Check if active
         if not self.is_active:
-            self.get_logger().warn('Controller is INACTIVE. Set is_active parameter to true.', throttle_duration_sec=5.0)
+            self.get_logger().warn('Controller is INACTIVE', throttle_duration_sec=5.0)
             self._stop_robot()
             return
         
-        # Check if we have received sensor data
-        if not self.odom_received:
-            self.get_logger().warn('No encoder odometry data received yet. Waiting...', throttle_duration_sec=2.0)
+        if not self.odom_received or not self.imu_received or not self.scan_received:
+            self.get_logger().warn('Waiting for sensors...', throttle_duration_sec=2.0)
             self._stop_robot()
             return
         
-        if not self.imu_received:
-            self.get_logger().warn('No IMU data received yet. Waiting...', throttle_duration_sec=2.0)
-            self._stop_robot()
-            return
-            
-        if not self.scan_received:
-            self.get_logger().warn('No LiDAR scan data received yet. Waiting...', throttle_duration_sec=2.0)
-            self._stop_robot()
-            return
-        
-        # Check if odometry is recent
+        # Check odometry freshness
         time_since_odom = (self.get_clock().now() - self.last_odom_time).nanoseconds / 1e9
         if time_since_odom > self.odom_timeout:
-            self.get_logger().warn(f'Encoder odometry timeout ({time_since_odom:.2f}s)', throttle_duration_sec=2.0)
+            self.get_logger().warn(f'Odometry timeout ({time_since_odom:.2f}s)', throttle_duration_sec=2.0)
             self._stop_robot()
             return
         
-        # State machine for obstacle avoidance
         cmd = Twist()
         
         if self.state == 'FORWARD':
-            # Check for obstacles in front
-            if self.closest_range_front < self.obstacle_threshold:
-                # Obstacle detected! Decide which way to turn
-                turn_direction = self._determine_clearest_side()
-                
-                if turn_direction == 'LEFT':
-                    self.state = 'TURN_LEFT'
-                    self.turn_target_yaw = self._normalize_angle(self.yaw + math.pi/2)
-                    self.get_logger().info(f'Obstacle at {self.closest_range_front:.2f}m! Turning LEFT to {math.degrees(self.turn_target_yaw):.1f}°')
-                else:
-                    self.state = 'TURN_RIGHT'
-                    self.turn_target_yaw = self._normalize_angle(self.yaw - math.pi/2)
-                    self.get_logger().info(f'Obstacle at {self.closest_range_front:.2f}m! Turning RIGHT to {math.degrees(self.turn_target_yaw):.1f}°')
-            else:
-                # No obstacle, move forward
-                cmd.linear.x = -self.max_speed
+            # Drive straight
+            cmd.linear.x = -self.max_speed
+            cmd.angular.z = 0.0
+        
+        elif self.state == 'TURN':
+            if self.turn_target_yaw is None or self.yaw is None:
+                cmd.linear.x = 0.0
                 cmd.angular.z = 0.0
-                self.get_logger().info(f'Moving FORWARD at {self.max_speed} m/s', throttle_duration_sec=2.0)
-        
-        elif self.state == 'TURN_LEFT':
-            angle_diff = self._shortest_angular_dist(self.yaw, self.turn_target_yaw)
-            
-            if abs(angle_diff) < self.turn_tolerance:
-                self.get_logger().info(f'Turn complete. Current yaw: {math.degrees(self.yaw):.1f}°')
-                self.state = 'FORWARD'
-                self.turn_target_yaw = None
             else:
-                cmd.linear.x = 0.0
-                cmd.angular.z = self.max_turn_rate
+                # Calculate error
+                angle_diff = self._shortest_angular_dist(self.yaw, self.turn_target_yaw)
+                
+                # Check if turn complete
+                if abs(angle_diff) < self.turn_tolerance:
+                    # Turn complete!
+                    angle_turned = abs(self._shortest_angular_dist(self.turn_start_yaw, self.yaw))
+                    self.get_logger().info(
+                        f'Turn complete! Turned {math.degrees(angle_turned):.1f}°, '
+                        f'Final yaw: {math.degrees(self.yaw):.1f}°'
+                    )
+                    
+                    # Switch to FORWARD with cooldown period
+                    self.state = 'FORWARD'
+                    self.turn_target_yaw = None
+                    self.turn_start_yaw = None
+                    
+                    # Set cooldown (from lab03) - prevents immediate re-turn
+                    now_sec = self.get_clock().now().nanoseconds / 1e9
+                    self.post_turn_deadline = now_sec + 0.5  # 500ms cooldown
+                    
+                    cmd.linear.x = self.max_speed
+                    cmd.angular.z = 0.0
+                else:
+                    # Continue turning with proportional control
+                    # Clamp to max turn rate
+                    angular_z = max(-self.max_turn_rate, 
+                                  min(self.max_turn_rate, 2.0 * angle_diff))
+                    
+                    cmd.linear.x = 0.0
+                    cmd.angular.z = angular_z
+                    
+                    self.get_logger().info(
+                        f'Turning: current={math.degrees(self.yaw):.1f}°, '
+                        f'target={math.degrees(self.turn_target_yaw):.1f}°, '
+                        f'error={math.degrees(angle_diff):.1f}°',
+                        throttle_duration_sec=0.5
+                    )
         
-        elif self.state == 'TURN_RIGHT':
-            angle_diff = self._shortest_angular_dist(self.yaw, self.turn_target_yaw)
-            
-            if abs(angle_diff) < self.turn_tolerance:
-                self.get_logger().info(f'Turn complete. Current yaw: {math.degrees(self.yaw):.1f}°')
-                self.state = 'FORWARD'
-                self.turn_target_yaw = None
-            else:
-                cmd.linear.x = 0.0
-                cmd.angular.z = -self.max_turn_rate
-        
-        # Publish command
         self.publisher_.publish(cmd)
         
-        # Debug info
-        self.get_logger().info(
-            f'State: {self.state}, Front: {self.closest_range_front:.2f}m, '
-            f'L: {self.closest_range_left:.2f}m, R: {self.closest_range_right:.2f}m, '
-            f'Yaw: {math.degrees(self.yaw):.1f}°, IMU ω: {self.angular_velocity:.2f} rad/s',
-            throttle_duration_sec=1.0
-        )
+        # Debug info when not turning
+        if self.state == 'FORWARD':
+            self.get_logger().info(
+                f'State: FORWARD, Front: {self.closest_range_front:.2f}m, '
+                f'L: {self.closest_range_left:.2f}m, R: {self.closest_range_right:.2f}m, '
+                f'Yaw: {math.degrees(self.yaw):.1f}°',
+                throttle_duration_sec=1.0
+            )
 
     def _stop_robot(self):
         """Send stop command"""
@@ -247,17 +267,12 @@ class Controller(Node):
         self.publisher_.publish(cmd)
 
     def emergency_stop(self):
-        """Emergency stop - send multiple stop commands"""
+        """Emergency stop"""
         print('EMERGENCY STOP - Stopping motors!')
         cmd = Twist()
-        cmd.linear.x = 0.0
-        cmd.angular.z = 0.0
-        
-        # Send stop command 10 times
         for i in range(10):
             self.publisher_.publish(cmd)
             time.sleep(0.02)
-        
         print('Motors stopped!')
 
 def main(args=None):
@@ -265,17 +280,13 @@ def main(args=None):
     node = Controller()
     
     def signal_handler(sig, frame):
-        """Handle CTRL+C before ROS2 shuts down"""
         print('\n⚠️  CTRL+C detected! Stopping robot...')
         node.emergency_stop()
         print('✓ Safe to exit now')
-        
-        # Now shutdown ROS2
         node.destroy_node()
         rclpy.shutdown()
         sys.exit(0)
     
-    # Register signal handler
     signal.signal(signal.SIGINT, signal_handler)
     
     try:
