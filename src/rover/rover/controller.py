@@ -2,7 +2,7 @@ import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import LaserScan, Imu
 import math
 import tf_transformations
 
@@ -25,7 +25,8 @@ class Controller(Node):
         self.get_logger().info(f'Parameters loaded: max_speed={self.max_speed}, max_turn_rate={self.max_turn_rate}, is_active={self.is_active}')
 
         # Subscriptions
-        self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
+        self.odom_sub = self.create_subscription(Odometry, '/odometry/filtered', self.odom_callback, 10)  # Changed from /odom_encoder
+        self.imu_sub = self.create_subscription(Imu, '/imu/data_raw', self.imu_callback, 10)
         self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
         
         # Control timer
@@ -36,12 +37,20 @@ class Controller(Node):
         self.closest_range_left = float('inf')
         self.closest_range_right = float('inf')
         
-        # Odometry tracking
+        # Odometry tracking (fused from encoder + IMU)
+        self.x = 0.0
+        self.y = 0.0
         self.yaw = 0.0
+        self.linear_velocity = 0.0
+        self.angular_velocity = 0.0
+        
+        # Sensor data timestamps
         self.last_odom_time = None
+        self.last_imu_time = None
         self.odom_received = False
+        self.imu_received = False
         self.scan_received = False
-        self.odom_timeout = 2.0  # Increased to 2 seconds
+        self.odom_timeout = 2.0
         
         # State machine for obstacle avoidance
         self.state = 'FORWARD'
@@ -49,19 +58,38 @@ class Controller(Node):
         self.turn_tolerance = 0.15
         
         self.get_logger().info('Controller initialized and ready')
-        self.get_logger().info('Waiting for odometry and scan data...')
+        self.get_logger().info('Waiting for encoder, IMU, and scan data...')
 
     def odom_callback(self, msg):
-        """Extract yaw angle from odometry"""
+        """Extract position and linear velocity from encoder odometry"""
         if not self.odom_received:
-            self.get_logger().info('First odometry message received!')
+            self.get_logger().info('First encoder odometry message received!')
             self.odom_received = True
             
         self.last_odom_time = self.get_clock().now()
         
+        # Update position from encoders
+        self.x = msg.pose.pose.position.x
+        self.y = msg.pose.pose.position.y
+        
+        # Get yaw from encoder odometry
         q = msg.pose.pose.orientation
         quat_list = [q.x, q.y, q.z, q.w]
         _, _, self.yaw = tf_transformations.euler_from_quaternion(quat_list)
+        
+        # Linear velocity from encoders
+        self.linear_velocity = msg.twist.twist.linear.x
+
+    def imu_callback(self, msg):
+        """Extract angular velocity from IMU"""
+        if not self.imu_received:
+            self.get_logger().info('First IMU message received!')
+            self.imu_received = True
+            
+        self.last_imu_time = self.get_clock().now()
+        
+        # Angular velocity from IMU (more accurate than encoders)
+        self.angular_velocity = msg.angular_velocity.z
 
     def scan_callback(self, msg):
         """Process LiDAR data to detect obstacles"""
@@ -131,7 +159,12 @@ class Controller(Node):
         
         # Check if we have received sensor data
         if not self.odom_received:
-            self.get_logger().warn('No odometry data received yet. Waiting...', throttle_duration_sec=2.0)
+            self.get_logger().warn('No encoder odometry data received yet. Waiting...', throttle_duration_sec=2.0)
+            self._stop_robot()
+            return
+        
+        if not self.imu_received:
+            self.get_logger().warn('No IMU data received yet. Waiting...', throttle_duration_sec=2.0)
             self._stop_robot()
             return
             
@@ -143,7 +176,7 @@ class Controller(Node):
         # Check if odometry is recent
         time_since_odom = (self.get_clock().now() - self.last_odom_time).nanoseconds / 1e9
         if time_since_odom > self.odom_timeout:
-            self.get_logger().warn(f'Odometry timeout ({time_since_odom:.2f}s)', throttle_duration_sec=2.0)
+            self.get_logger().warn(f'Encoder odometry timeout ({time_since_odom:.2f}s)', throttle_duration_sec=2.0)
             self._stop_robot()
             return
         
@@ -199,7 +232,7 @@ class Controller(Node):
         self.get_logger().info(
             f'State: {self.state}, Front: {self.closest_range_front:.2f}m, '
             f'L: {self.closest_range_left:.2f}m, R: {self.closest_range_right:.2f}m, '
-            f'Yaw: {math.degrees(self.yaw):.1f}°',
+            f'Yaw: {math.degrees(self.yaw):.1f}°, IMU ω: {self.angular_velocity:.2f} rad/s',
             throttle_duration_sec=1.0
         )
 

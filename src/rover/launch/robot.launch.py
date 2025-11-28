@@ -31,22 +31,6 @@ def generate_launch_description():
             output='screen'
         ),
         
-        # Odometry publisher
-        Node(
-            package='rover',
-            executable='odometry_publisher',
-            name='odometry_publisher',
-            parameters=[{
-                'wheel_radius': 0.065,
-                'wheel_base': 0.30,
-                'ticks_per_rev': 1600
-            }],
-            output='screen',
-            remappings=[
-                ('/odom', '/odom_encoder')  # Rename to avoid conflict with EKF output
-            ]
-        ),
-        
         # IMU node
         Node(
             package='rover',
@@ -59,7 +43,7 @@ def generate_launch_description():
             output='screen'
         ),
         
-        # Robot localization EKF
+        # EKF for sensor fusion
         Node(
             package='robot_localization',
             executable='ekf_node',
@@ -67,7 +51,6 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'frequency': 30.0,
-                'sensor_timeout': 0.1,
                 'two_d_mode': True,
                 'publish_tf': True,
                 'map_frame': 'map',
@@ -75,24 +58,28 @@ def generate_launch_description():
                 'base_link_frame': 'base_link',
                 'world_frame': 'odom',
                 
-                # Fuse encoder odometry (x, y, yaw, vx, vy, vyaw)
+                # Encoder odometry (position + velocity)
                 'odom0': '/odom_encoder',
-                'odom0_config': [False, False, False,  # x, y, z position
-                                False, False, False,   # roll, pitch, yaw orientation
-                                True,  True,  False,   # vx, vy, vz velocity
-                                False, False, True,    # vroll, vpitch, vyaw
-                                False, False, False],  # ax, ay, az acceleration
+                'odom0_config': [False, False, False,  # x, y, z
+                                 False, False, False,  # roll, pitch, yaw
+                                 True,  True,  False,  # vx, vy, vz
+                                 False, False, True,   # vroll, vpitch, vyaw
+                                 False, False, False], # ax, ay, az
+                'odom0_differential': False,
+                'odom0_relative': False,
                 
-                # Fuse IMU (orientation and angular velocity)
+                # IMU (angular velocity + linear acceleration)
                 'imu0': '/imu/data_raw',
-                'imu0_config': [False, False, False,   # x, y, z position
-                               False, False, True,     # roll, pitch, yaw orientation
-                               False, False, False,    # vx, vy, vz velocity
-                               False, False, True,     # vroll, vpitch, vyaw
-                               False, False, False],   # ax, ay, az acceleration
+                'imu0_config': [False, False, False,  # x, y, z
+                                False, False, False,  # roll, pitch, yaw
+                                False, False, False,  # vx, vy, vz
+                                False, False, True,   # vroll, vpitch, vyaw
+                                True,  True,  False], # ax, ay, az
+                'imu0_differential': False,
+                'imu0_relative': True,
             }]
         ),
-        
+                
         # Controller
         Node(
             package='rover',
