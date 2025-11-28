@@ -34,7 +34,7 @@ def generate_launch_description():
             output='screen'
         ),
         
-        # EKF for sensor fusion
+        # EKF for sensor fusion (encoder + IMU)
         Node(
             package='robot_localization',
             executable='ekf_node',
@@ -49,14 +49,12 @@ def generate_launch_description():
                 'base_link_frame': 'base_link',
                 'world_frame': 'odom',
                 
-                # DEBUG - Print detailed info
-                'print_diagnostics': True,
-                'debug': False,
+                'print_diagnostics': False,
                 
-                # Encoder odometry - ONLY linear velocity
+                # Encoder odometry - position AND velocity
                 'odom0': '/odom_encoder',
                 'odom0_config': [
-                    False, False, False,  # x, y, z position
+                    True,  True,  False,  # x, y position ← ENABLED
                     False, False, False,  # roll, pitch, yaw
                     True,  False, False,  # vx, vy, vz
                     False, False, False,  # vroll, vpitch, vyaw
@@ -70,9 +68,9 @@ def generate_launch_description():
                 'imu0': '/imu/data_raw',
                 'imu0_config': [
                     False, False, False,  # x, y, z position
-                    False, False, True,   # roll, pitch, YAW ← Enable this
+                    False, False, True,   # roll, pitch, YAW ← From IMU
                     False, False, False,  # vx, vy, vz
-                    False, False, True,   # vroll, vpitch, VYAW ← Enable this
+                    False, False, True,   # vroll, vpitch, VYAW ← From IMU
                     False, False, False   # ax, ay, az
                 ],
                 'imu0_differential': False,

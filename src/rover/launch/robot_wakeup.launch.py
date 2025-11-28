@@ -49,16 +49,16 @@ def generate_launch_description():
                 'base_link_frame': 'base_link',
                 'world_frame': 'odom',
                 
-                'print_diagnostics': False,  # Less verbose
+                'print_diagnostics': False,
                 
-                # Encoder odometry - ONLY linear velocity
+                # Encoder odometry - position AND velocity
                 'odom0': '/odom_encoder',
                 'odom0_config': [
-                    False, False, False,
-                    False, False, False,
-                    True,  False, False,
-                    False, False, False,
-                    False, False, False
+                    True,  True,  False,  # x, y position ← ENABLED
+                    False, False, False,  # roll, pitch, yaw
+                    True,  False, False,  # vx, vy, vz
+                    False, False, False,  # vroll, vpitch, vyaw
+                    False, False, False   # ax, ay, az
                 ],
                 'odom0_differential': False,
                 'odom0_relative': False,
@@ -67,11 +67,11 @@ def generate_launch_description():
                 # IMU - orientation and angular velocity
                 'imu0': '/imu/data_raw',
                 'imu0_config': [
-                    False, False, False,
-                    False, False, True,   # YAW
-                    False, False, False,
-                    False, False, True,   # VYAW
-                    False, False, False
+                    False, False, False,  # x, y, z position
+                    False, False, True,   # roll, pitch, YAW ← From IMU
+                    False, False, False,  # vx, vy, vz
+                    False, False, True,   # vroll, vpitch, VYAW ← From IMU
+                    False, False, False   # ax, ay, az
                 ],
                 'imu0_differential': False,
                 'imu0_relative': False,
