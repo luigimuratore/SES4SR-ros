@@ -19,7 +19,7 @@ class Controller(Node):
         self.declare_parameter('max_turn_rate', 0.8)
         self.declare_parameter('obstacle_threshold', 0.4)
         self.declare_parameter('is_active', True)
-        self.declare_parameter('turn_tolerance', 0.2)  # 11.5° tolerance
+        self.declare_parameter('turn_tolerance', 0.15)  # 11.5° tolerance
 
         self.max_speed = self.get_parameter('max_speed').value
         self.max_turn_rate = self.get_parameter('max_turn_rate').value
