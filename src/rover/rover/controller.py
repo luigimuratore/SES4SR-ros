@@ -135,9 +135,9 @@ class Controller(Node):
     def _determine_clearest_side(self):
         """Determine which side has more clearance"""
         if self.closest_range_left > self.closest_range_right:
-            return 'LEFT'
-        else:
             return 'RIGHT'
+        else:
+            return 'LEFT'
 
     def _normalize_angle(self, angle):
         """Normalize angle to [-pi, pi]"""
@@ -202,7 +202,7 @@ class Controller(Node):
                     self.get_logger().info(f'Obstacle at {self.closest_range_front:.2f}m! Turning RIGHT to {math.degrees(self.turn_target_yaw):.1f}°')
             else:
                 # No obstacle, move forward
-                cmd.linear.x = self.max_speed
+                cmd.linear.x = -self.max_speed
                 cmd.angular.z = 0.0
                 self.get_logger().info(f'Moving FORWARD at {self.max_speed} m/s', throttle_duration_sec=2.0)
         

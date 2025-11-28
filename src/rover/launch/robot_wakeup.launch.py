@@ -19,7 +19,7 @@ def generate_launch_description():
             )
         ),
 
-        # ODOM node
+        # ODOM node (encoder + IMU)
         Node(
             package='rover',
             executable='odom_node',
@@ -34,7 +34,7 @@ def generate_launch_description():
             output='screen'
         ),
         
-        # EKF for sensor fusion
+        # EKF for sensor fusion (encoder + IMU)
         Node(
             package='robot_localization',
             executable='ekf_node',
@@ -49,18 +49,16 @@ def generate_launch_description():
                 'base_link_frame': 'base_link',
                 'world_frame': 'odom',
                 
-                # DEBUG - Print detailed info
-                'print_diagnostics': True,
-                'debug': False,
+                'print_diagnostics': False,  # Less verbose
                 
                 # Encoder odometry - ONLY linear velocity
                 'odom0': '/odom_encoder',
                 'odom0_config': [
-                    False, False, False,  # x, y, z position
-                    False, False, False,  # roll, pitch, yaw
-                    True,  False, False,  # vx, vy, vz
-                    False, False, False,  # vroll, vpitch, vyaw
-                    False, False, False   # ax, ay, az
+                    False, False, False,
+                    False, False, False,
+                    True,  False, False,
+                    False, False, False,
+                    False, False, False
                 ],
                 'odom0_differential': False,
                 'odom0_relative': False,
@@ -69,11 +67,11 @@ def generate_launch_description():
                 # IMU - orientation and angular velocity
                 'imu0': '/imu/data_raw',
                 'imu0_config': [
-                    False, False, False,  # x, y, z position
-                    False, False, True,   # roll, pitch, YAW ← Enable this
-                    False, False, False,  # vx, vy, vz
-                    False, False, True,   # vroll, vpitch, VYAW ← Enable this
-                    False, False, False   # ax, ay, az
+                    False, False, False,
+                    False, False, True,   # YAW
+                    False, False, False,
+                    False, False, True,   # VYAW
+                    False, False, False
                 ],
                 'imu0_differential': False,
                 'imu0_relative': False,
@@ -81,18 +79,6 @@ def generate_launch_description():
                 'imu0_remove_gravitational_acceleration': True,
             }]
         ),
-                
-        # Controller
-        Node(
-            package='rover',
-            executable='controller',
-            name='controller',
-            parameters=[{
-                'max_speed': 0.15,
-                'max_turn_rate': 1.0,
-                'obstacle_threshold': 0.4,
-                'is_active': True
-            }],
-            output='screen'
-        ),
+        
+        # NO CONTROLLER - Manual control only via /cmd_vel
     ])

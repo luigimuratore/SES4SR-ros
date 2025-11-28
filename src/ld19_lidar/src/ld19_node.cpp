@@ -114,13 +114,45 @@ auto LD19Node::timer_callback()->void
     if (publisher_->get_subscription_count() > 0) {
       auto n_points = output_.ranges.size();
       if (n_points > 0) {
-        // actual_publish_interval_seconds was undefined. Use a safe default
-        // (matches the timer created with 100ms in the constructor) so
-        // scan_time/time_increment are set meaningfully for consumers.
-        double publish_interval_seconds = 0.1; // 100 ms fallback
+        double publish_interval_seconds = 0.1;
         output_.scan_time = publish_interval_seconds;
         output_.time_increment = output_.scan_time / static_cast<double>(n_points);
       }
+
+      // Print front section measurements (±15 degrees from center)
+      int center_index = n_points / 2;
+      int front_range = n_points / 12;  // ±15° sector (360°/24 = 15°)
+
+      float min_front_distance = std::numeric_limits<float>::infinity();
+      int valid_points = 0;
+
+      for (int i = center_index - front_range; i <= center_index + front_range; i++) {
+        int idx = i;
+        if (idx < 0) idx += n_points;
+        if (idx >= n_points) idx -= n_points;
+
+        float range = output_.ranges[idx];
+        if (!std::isnan(range) && !std::isinf(range) && range > 0.0) {
+          if (range < min_front_distance) {
+            min_front_distance = range;
+          }
+          valid_points++;
+        }
+      }
+
+      // Log every 1 second (100ms timer × 10 = 1s)
+      static int count = 0;
+      if (++count >= 10) {
+        if (valid_points > 0) {
+          RCLCPP_INFO(this->get_logger(),
+                      "Front sector: %.2fm (%d valid points)",
+                      min_front_distance, valid_points);
+        } else {
+          RCLCPP_WARN(this->get_logger(), "Front sector: No valid readings");
+        }
+        count = 0;
+      }
+
       publisher_->publish(output_);
     }
     lidar_->ResetFrameReady();
