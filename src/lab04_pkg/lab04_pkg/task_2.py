@@ -174,7 +174,7 @@ class Task_2(Node):
     def landmark_callback(self, msg: LandmarkArray): #Update with range/bearing to known landmarks
         if not msg.landmarks:
             return
-
+        
         for lm in msg.landmarks:
             lm_id = lm.id
             if lm_id not in self.landmarks:
@@ -229,6 +229,9 @@ class Task_2(Node):
                 residual=residual_landmark,
                 angle_idx=1)
 
+        # Log only the updated position and velocity after all landmark updates
+        x, y, th, v, w = self.ekf.mu
+        self.get_logger().info(f'LANDMARK UPDATE RESULT: x={x:.3f}, y={y:.3f}, v={v:.3f}, w={w:.3f}, th={np.degrees(th):.1f}° ({th:.3f} rad)')
         self._publish_state()
 
    
