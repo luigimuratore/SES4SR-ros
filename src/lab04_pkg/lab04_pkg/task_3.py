@@ -22,7 +22,7 @@ class Task_1(Node): #Node for EKF-based robot localization using landmarks
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.77)
         self.declare_parameter('initial_theta', 0.0)
-        self.declare_parameter('process_noise_v', 0.1)
+        self.declare_parameter('process_noise_v', 0.05)
         self.declare_parameter('process_noise_omega', 0.05)
         self.declare_parameter('measurement_noise_range', 0.1)
         self.declare_parameter('measurement_noise_bearing', 0.05)

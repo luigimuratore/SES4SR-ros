@@ -39,12 +39,9 @@ def compute_jacobians(robot_pose, landmark):
     # Assemble Jacobian matrix
     H = np.array([[dr_dx, dr_dy, dr_dtheta],
                   [dphi_dx, dphi_dy, dphi_dtheta]])
-    
     return H
 
-
 def main():
-    # robot pose
     robot_pose = np.array([0., 0., math.pi/4])
     # landmarks position in the map
     landmarks = [
@@ -76,7 +73,6 @@ def main():
     # Plot landmarks, robot pose with sensor FOV, and detected landmarks with associated probability
     plot_landmarks(landmarks, robot_pose, z, p, fov=fov)
 
-    
     #Sampling poses from landmark model
     if len(z) == 0:
         print("No landmarks detected!")

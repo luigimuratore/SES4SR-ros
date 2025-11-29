@@ -148,3 +148,59 @@ def compute_p_hit_dist(dist, max_dist, sigma):
     p_hit = gaussian(dist, 0., sigma)*normalize_hit
 
     return p_hit
+
+def eval_gux(mu, u, sigma_u, dt):
+    x, y, th = mu
+    v, w = u
+    eps = 1e-5
+    if abs(w) > eps:
+        r = v / w
+        th_new = th + w * dt
+        x_new = x + r * (np.sin(th_new) - np.sin(th))
+        y_new = y - r * (np.cos(th_new) - np.cos(th))
+    else:
+        th_new = th + w * dt
+        x_new = x + v * np.cos(th) * dt
+        y_new = y + v * np.sin(th) * dt
+    th_new = normalize_angle(th_new)
+    return np.array([x_new, y_new, th_new])
+
+def eval_Gt(x, y, th, v, w, dt):
+    eps = 1e-5
+    if abs(w) > eps:
+        r = v / w
+        th_new = th + w * dt
+        s_th, c_th = np.sin(th), np.cos(th)
+        s_th_new, c_th_new = np.sin(th_new), np.cos(th_new)
+        dxdth = r * (c_th_new - c_th)
+        dydth = r * (s_th_new - s_th)
+    else:
+        dxdth = -v * np.sin(th) * dt
+        dydth = v * np.cos(th) * dt
+    return np.array([
+        [1.0, 0.0, dxdth],
+        [0.0, 1.0, dydth],
+        [0.0, 0.0, 1.0]
+    ])
+
+def eval_Vt(x, y, th, v, w, dt):
+    eps = 1e-5
+    if abs(w) > eps:
+        th_new = th + w * dt
+        s_th, c_th = np.sin(th), np.cos(th)
+        s_th_new, c_th_new = np.sin(th_new), np.cos(th_new)
+        w2 = w * w
+        dvx = (w * (s_th_new - s_th) - v * (c_th_new - c_th)) / w2
+        dvy = (w * (-c_th_new + c_th) - v * (s_th_new - s_th)) / w2
+        dwx = v * (c_th_new * dt * w - (s_th_new - s_th)) / w2
+        dwy = v * (s_th_new * dt * w - (-c_th_new + c_th)) / w2
+    else:
+        dvx = np.cos(th) * dt
+        dvy = np.sin(th) * dt
+        dwx = -0.5 * v * dt * dt * np.sin(th)
+        dwy = 0.5 * v * dt * dt * np.cos(th)
+    return np.array([
+        [dvx, dwx],
+        [dvy, dwy],
+        [0.0, dt]
+    ])
