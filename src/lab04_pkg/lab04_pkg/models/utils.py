@@ -165,6 +165,19 @@ def eval_gux(mu, u, sigma_u, dt):
     th_new = normalize_angle(th_new)
     return np.array([x_new, y_new, th_new])
 
+def eval_gux_5d(mu, u, sigma_u, dt):
+    x, y, th, v, w = mu
+    # u is not used, as v and w are part of the state
+    if abs(w) < 1e-5:
+        x_new = x + v * np.cos(th) * dt
+        y_new = y + v * np.sin(th) * dt
+        th_new = normalize_angle(th + w * dt)
+    else:
+        x_new = x + (v/w) * (np.sin(th + w*dt) - np.sin(th))
+        y_new = y + (v/w) * (-np.cos(th + w*dt) + np.cos(th))
+        th_new = normalize_angle(th + w * dt)
+    return np.array([x_new, y_new, th_new, v, w])
+
 def eval_Gt(x, y, th, v, w, dt):
     eps = 1e-5
     if abs(w) > eps:
@@ -182,6 +195,38 @@ def eval_Gt(x, y, th, v, w, dt):
         [0.0, 1.0, dydth],
         [0.0, 0.0, 1.0]
     ])
+
+def eval_Gt_5d(x, y, th, v, w, u0, u1, dt):
+    if abs(w) < 1e-5:
+        return np.array([
+            [1.0, 0.0, -v*np.sin(th)*dt, np.cos(th)*dt, 0.0],
+            [0.0, 1.0,  v*np.cos(th)*dt, np.sin(th)*dt, 0.0],
+            [0.0, 0.0,  1.0,             0.0,           dt ],
+            [0.0, 0.0,  0.0,             1.0,           0.0],
+            [0.0, 0.0,  0.0,             0.0,           1.0]
+        ])
+    else:
+        sin_th = np.sin(th)
+        cos_th = np.cos(th)
+        sin_th_wdt = np.sin(th + w*dt)
+        cos_th_wdt = np.cos(th + w*dt)
+        dx_dth = (v/w) * (cos_th_wdt - cos_th)
+        dy_dth = (v/w) * (sin_th_wdt - sin_th)
+        dx_dv = (1/w) * (sin_th_wdt - sin_th)
+        dy_dv = (1/w) * (-cos_th_wdt + cos_th)
+        term1_x = (-v / (w**2)) * (sin_th_wdt - sin_th)
+        term2_x = (v / w) * (np.cos(th + w*dt) * dt)
+        dx_dw = term1_x + term2_x
+        term1_y = (-v / (w**2)) * (-cos_th_wdt + cos_th)
+        term2_y = (v / w) * (np.sin(th + w*dt) * dt)
+        dy_dw = term1_y + term2_y
+        return np.array([
+            [1.0, 0.0, dx_dth, dx_dv, dx_dw],
+            [0.0, 1.0, dy_dth, dy_dv, dy_dw],
+            [0.0, 0.0, 1.0,    0.0,   dt   ],
+            [0.0, 0.0, 0.0,    1.0,   0.0  ],
+            [0.0, 0.0, 0.0,    0.0,   1.0  ]
+        ])
 
 def eval_Vt(x, y, th, v, w, dt):
     eps = 1e-5
@@ -203,4 +248,14 @@ def eval_Vt(x, y, th, v, w, dt):
         [dvx, dwx],
         [dvy, dwy],
         [0.0, dt]
+    ])
+
+def eval_Vt_5d(x, y, th, v, w, u0, u1, dt):
+    # For process noise on v and w only
+    return np.array([
+        [0.0, 0.0],
+        [0.0, 0.0],
+        [0.0, 0.0],
+        [1.0, 0.0],
+        [0.0, 1.0]
     ])
