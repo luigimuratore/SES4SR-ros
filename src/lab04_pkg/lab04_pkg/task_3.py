@@ -58,8 +58,7 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
                 dim_u=2,
                 eval_gux=eval_gux,
                 eval_Gt=eval_Gt,
-                eval_Vt=eval_Vt
-            )
+                eval_Vt=eval_Vt)
             self.ekf.mu = np.array([initial_x, initial_y, initial_theta])
             self.ekf.Sigma = np.diag([0.01, 0.01, 0.01])
             self.ekf.Mt = np.diag([self.sigma_v ** 2, self.sigma_omega ** 2])
@@ -117,16 +116,11 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
         landmarks = {}
         for i in range(len(ids)):
             landmarks[ids[i]] = np.array([xs[i], ys[i]])
-            self.get_logger().info(
-                f'  Landmark {ids[i]}: ({xs[i]:.2f}, {ys[i]:.2f})'
-            )
-
+            self.get_logger().info(f'  Landmark {ids[i]}: ({xs[i]:.2f}, {ys[i]:.2f})')
         return landmarks
 
      
-
     # CALLBACKS
-
     def odom_callback(self, msg: Odometry): #Store latest linear and angular velocity from /odom
         self.last_v = msg.twist.twist.linear.x
         self.last_omega = msg.twist.twist.angular.z
@@ -153,15 +147,13 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
                     f'σx={np.sqrt(self.ekf.Sigma[0, 0]):.3f}, '
                     f'σy={np.sqrt(self.ekf.Sigma[1, 1]):.3f}, '
                     f'σθ={np.degrees(np.sqrt(self.ekf.Sigma[2, 2])):.1f}°, '
-                    f'v={self.last_v:.2f}, ω={self.last_omega:.2f}'
-                )
+                    f'v={self.last_v:.2f}, ω={self.last_omega:.2f}')
             else:
                 self.get_logger().info(
                     f'PRED #{self._prediction_count}: μ = [{mu[0]:.3f}, {mu[1]:.3f}, {np.degrees(mu[2]):.1f}°, v={mu[3]:.2f}, w={mu[4]:.2f}], '
                     f'σx={np.sqrt(self.ekf.Sigma[0, 0]):.3f}, '
                     f'σy={np.sqrt(self.ekf.Sigma[1, 1]):.3f}, '
-                    f'σθ={np.degrees(np.sqrt(self.ekf.Sigma[2, 2])):.1f}°'
-                )
+                    f'σθ={np.degrees(np.sqrt(self.ekf.Sigma[2, 2])):.1f}°')
         self._publish_state()
 
     def landmark_callback(self, msg: LandmarkArray): # EKF update for each landmark measurement
@@ -187,8 +179,7 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
                     hx_args=(*self.ekf.mu, lm_x, lm_y),
                     Ht_args=(*self.ekf.mu, lm_x, lm_y),
                     residual=residual,
-                    angle_idx=1
-                )
+                    angle_idx=1)
             else:
                 # Task 2: pose+velocity
                 def hx_landmark(x, y, th, v, w, lx, ly):
@@ -209,8 +200,7 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
                     db_dtheta = -1.0
                     return np.array([
                         [dr_dx, dr_dy, 0.0, 0.0, 0.0],
-                        [db_dx, db_dy, db_dtheta, 0.0, 0.0],
-                    ])
+                        [db_dx, db_dy, db_dtheta, 0.0, 0.0],])
                 def residual_landmark(z, z_hat, angle_idx=1):
                     res = z - z_hat
                     res[angle_idx] = normalize_angle(res[angle_idx])
@@ -223,22 +213,16 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
                     hx_args=(*self.ekf.mu, lm_x, lm_y),
                     Ht_args=(*self.ekf.mu, lm_x, lm_y),
                     residual=residual_landmark,
-                    angle_idx=1
-                )
+                    angle_idx=1)
         mu = self.ekf.mu
         if len(mu) == 3:
-            self.get_logger().info(
-                f'LANDMARK UPDATE RESULT: x={mu[0]:.3f}, y={mu[1]:.3f}, θ={np.degrees(mu[2]):.1f}°'
-            )
+            self.get_logger().info(f'LANDMARK UPDATE RESULT: x={mu[0]:.3f}, y={mu[1]:.3f}, θ={np.degrees(mu[2]):.1f}°')
         else:
-            self.get_logger().info(
-                f'LANDMARK UPDATE RESULT: x={mu[0]:.3f}, y={mu[1]:.3f}, v={mu[3]:.3f}, w={mu[4]:.3f}'
-            )
+            self.get_logger().info(f'LANDMARK UPDATE RESULT: x={mu[0]:.3f}, y={mu[1]:.3f}, v={mu[3]:.3f}, w={mu[4]:.3f}')
         self._publish_state()
 
     # PUBLISHING 
-    def _publish_state(self):
-        """Publish EKF state as Odometry on /ekf."""
+    def _publish_state(self): #Publish EKF state as Odometry on /ekf
         msg = Odometry()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'odom'
@@ -267,13 +251,11 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
         else:
             msg.twist.twist.linear.x = float(self.last_v)
             msg.twist.twist.angular.z = float(self.last_omega)
-
         self.ekf_pub.publish(msg)
-
 
 def main(args=None):
     rclpy.init(args=args)
-    # Ask user for mode
+    # Ask for task
     mode = None
     while mode not in [1, 2]:
         try:
@@ -288,7 +270,6 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
-
 
 if __name__ == '__main__':
     main()
