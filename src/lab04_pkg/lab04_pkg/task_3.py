@@ -22,13 +22,13 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.77)
         self.declare_parameter('initial_theta', 0.0)
-        self.declare_parameter('process_noise_v', 0.05)
-        self.declare_parameter('process_noise_omega', 0.05)
-        self.declare_parameter('measurement_noise_range', 0.2)
-        self.declare_parameter('measurement_noise_bearing', 0.05)
-        self.declare_parameter('encoder_noise_v', 0.05)
-        self.declare_parameter('encoder_noise_omega', 0.05)
-        self.declare_parameter('imu_noise_omega', 0.02)
+        self.declare_parameter('process_noise_v', 0.01)
+        self.declare_parameter('process_noise_omega', 0.01)
+        self.declare_parameter('measurement_noise_range', 0.5)
+        self.declare_parameter('measurement_noise_bearing', 0.2)
+        self.declare_parameter('encoder_noise_v', 0.02)
+        self.declare_parameter('encoder_noise_omega', 0.02)
+        self.declare_parameter('imu_noise_omega', 0.01)
 
         self.prediction_rate = self.get_parameter('prediction_rate').value
         initial_x = self.get_parameter('initial_x').value
