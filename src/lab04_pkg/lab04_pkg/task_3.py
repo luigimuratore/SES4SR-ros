@@ -22,13 +22,13 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.77)
         self.declare_parameter('initial_theta', 0.0)
-        self.declare_parameter('process_noise_v', 0.01)
-        self.declare_parameter('process_noise_omega', 0.01)
-        self.declare_parameter('measurement_noise_range', 0.5)
-        self.declare_parameter('measurement_noise_bearing', 0.2)
-        self.declare_parameter('encoder_noise_v', 0.02)
-        self.declare_parameter('encoder_noise_omega', 0.02)
-        self.declare_parameter('imu_noise_omega', 0.01)
+        self.declare_parameter('process_noise_v', 0.0)
+        self.declare_parameter('process_noise_omega', 0.0)
+        self.declare_parameter('measurement_noise_range', 1.0)
+        self.declare_parameter('measurement_noise_bearing', 1.00)
+        self.declare_parameter('encoder_noise_v', 1.00)
+        self.declare_parameter('encoder_noise_omega', 1.00)
+        self.declare_parameter('imu_noise_omega', 1.00)
 
         self.prediction_rate = self.get_parameter('prediction_rate').value
         initial_x = self.get_parameter('initial_x').value
@@ -121,28 +121,9 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
 
      
     # CALLBACKS
-    def odom_callback(self, msg: Odometry):
+    def odom_callback(self, msg: Odometry): #Store latest linear and angular velocity from /odom
         self.last_v = msg.twist.twist.linear.x
         self.last_omega = msg.twist.twist.angular.z
-
-        # For Task 2: update v and w in the state using odometry
-        if len(self.ekf.mu) == 5:
-            z = np.array([self.last_v, self.last_omega])
-            def hx_enc(x, y, th, v, w):
-                return np.array([v, w])
-            def H_enc(x, y, th, v, w):
-                return np.array([
-                    [0.0, 0.0, 0.0, 1.0, 0.0],
-                    [0.0, 0.0, 0.0, 0.0, 1.0],
-                ])
-            self.ekf.update(
-                z=z,
-                eval_hx=hx_enc,
-                eval_Ht=H_enc,
-                Qt=self.Qt_encoder,
-                hx_args=tuple(self.ekf.mu),
-                Ht_args=tuple(self.ekf.mu)
-            )
 
     def prediction_callback(self): #EKF prediction step, called at fixed rate
         now = self.get_clock().now()
