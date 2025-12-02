@@ -2,8 +2,8 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist, PoseStamped
-from std_msgs.msg import String
 from nav_msgs.msg import Odometry
+from std_msgs.msg import String
 import numpy as np
 import math
 import time
@@ -13,13 +13,13 @@ import sys
 sys.path.append('/home/ubuntu/Documents/SES4SR-ros/src/planning_control_methods/Controllers/DWA')
 from dwa import DWA  # Correct import for your workspace
 
-class DWAControllerNode(Node):
+class task_1(Node):
     def __init__(self):
-        super().__init__('dwa_controller_node')
+        super().__init__('task_1')
         # Parameters
-        self.declare_parameter('alpha', 0.5)
-        self.declare_parameter('beta', 0.2)
-        self.declare_parameter('gamma', 0.3)
+        self.declare_parameter('alpha', 0.2)
+        self.declare_parameter('beta', 0.5)
+        self.declare_parameter('gamma', 0.1)
         self.declare_parameter('control_rate', 15.0)
         self.declare_parameter('collision_radius', 0.20)  # meters
         self.declare_parameter('collision_tolerance', 0.18)  # meters
@@ -38,9 +38,8 @@ class DWAControllerNode(Node):
         self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.feedback_pub = self.create_publisher(String, '/dwa_feedback', 10)
         self.create_subscription(LaserScan, '/scan', self.laser_callback, 10)
-        self.create_subscription(PoseStamped, '/goal_pose', self.goal_callback, 10)
+        self.create_subscription(Odometry, '/dynamic_goal_pose', self.goal_callback_odom, 10)
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
-        # TODO: Subscribe to odometry if needed for robot pose
 
         # Timer for main control loop
         timer_period = 1.0 / self.get_parameter('control_rate').value
@@ -56,6 +55,7 @@ class DWAControllerNode(Node):
             collision_tol=self.get_parameter('collision_tolerance').value,
             v_samples=10,  # or tune as needed
             w_samples=20,  # or tune as needed
+            init_pose=[0, 0, 0],  # <-- Add this line
         )
 
     def laser_callback(self, msg):
@@ -75,12 +75,8 @@ class DWAControllerNode(Node):
             sector = ranges[i*sector_size:(i+1)*sector_size]
             filtered.append(np.min(sector) if len(sector) > 0 else self.get_parameter('max_lidar_range').value)
         self.laser_ranges = np.array(filtered)
-
-    def goal_callback(self, msg):
-        self.goal_pose = msg.pose
-        self.control_step = 0
-        self.task_start_time = time.time()
-        self.get_logger().info("Received new goal!")
+        self.get_logger().debug("Received LaserScan.")
+        self.get_logger().info(f"Min laser range: {np.min(self.laser_ranges):.2f}")
 
     def odom_callback(self, msg):
         pos = msg.pose.pose.position
@@ -90,6 +86,19 @@ class DWAControllerNode(Node):
         cosy_cosp = 1 - 2 * (ori.y * ori.y + ori.z * ori.z)
         yaw = math.atan2(siny_cosp, cosy_cosp)
         self.current_pose = np.array([pos.x, pos.y, yaw])
+        self.get_logger().debug(f"Odometry: {self.current_pose}")
+
+    def goal_callback_odom(self, msg):
+        self.goal_pose = msg.pose.pose
+        self.control_step = 0
+        self.task_start_time = time.time()
+        self.get_logger().info(f"Received new goal (Odometry) at ({self.goal_pose.position.x:.2f}, {self.goal_pose.position.y:.2f})")
+
+    def goal_callback_ps(self, msg):
+        self.goal_pose = msg.pose
+        self.control_step = 0
+        self.task_start_time = time.time()
+        self.get_logger().info(f"Received new goal (PoseStamped) at ({self.goal_pose.position.x:.2f}, {self.goal_pose.position.y:.2f})")
 
     def control_callback(self):
         if self.goal_pose is None or self.laser_ranges is None or self.current_pose is None:
@@ -109,6 +118,7 @@ class DWAControllerNode(Node):
 
         # DWA: compute control
         v, w = self.dwa.compute_cmd(goal_xy, self.current_pose, obstacles)
+        self.get_logger().info(f"DWA output: v={v:.2f}, w={w:.2f}")
 
         # Publish command
         cmd = Twist()
@@ -132,6 +142,10 @@ class DWAControllerNode(Node):
 
         # Feedback every N steps
         if self.control_step % self.get_parameter('feedback_steps').value == 0:
+            dx = goal_xy[0] - self.current_pose[0]
+            dy = goal_xy[1] - self.current_pose[1]
+            angle_to_goal = math.atan2(dy, dx) - self.current_pose[2]
+            self.get_logger().info(f"Distance to goal: {math.hypot(dx, dy):.2f}, Angle to goal: {math.degrees(angle_to_goal):.2f}")
             self.publish_feedback(dist_to_goal)
 
     def stop_robot(self):
@@ -151,9 +165,10 @@ class DWAControllerNode(Node):
         self.get_logger().info(msg.data)
 
     def compute_distance(self, pose1, pose2):
-        # TODO: Implement based on your pose representation
-        dx = pose1.position.x - pose2.position.x
-        dy = pose1.position.y - pose2.position.y
+        # pose1: np.array([x, y, theta])
+        # pose2: geometry_msgs.msg.Pose
+        dx = pose1[0] - pose2.position.x
+        dy = pose1[1] - pose2.position.y
         return math.hypot(dx, dy)
 
     def scan_to_obstacles(self, robot_pose, scan_ranges):
@@ -173,7 +188,8 @@ class DWAControllerNode(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = DWAControllerNode()
+    node = task_1()
+    
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
