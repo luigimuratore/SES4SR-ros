@@ -8,18 +8,17 @@ import numpy as np
 import math
 import time
 
-# Import your DWA logic (adapt the import as needed)
 import sys
 sys.path.append('/home/ubuntu/Documents/SES4SR-ros/src/planning_control_methods/Controllers/DWA')
-from dwa import DWA  # Correct import for your workspace
+from dwa import DWA  
 
 class task_1(Node):
     def __init__(self):
         super().__init__('task_1')
         # Parameters
-        self.declare_parameter('alpha', 0.2)
-        self.declare_parameter('beta', 0.5)
-        self.declare_parameter('gamma', 0.1)
+        self.declare_parameter('alpha', 0.12) # heading weight
+        self.declare_parameter('beta', 1.0)  # speed weight
+        self.declare_parameter('gamma', 0.4) # obstacle weight
         self.declare_parameter('control_rate', 15.0)
         self.declare_parameter('collision_radius', 0.20)  # meters
         self.declare_parameter('collision_tolerance', 0.18)  # meters
@@ -28,11 +27,13 @@ class task_1(Node):
         self.declare_parameter('feedback_steps', 50)
         # State
         self.goal_pose = None
-        self.current_pose = None  # You may need odometry for this
+        self.current_pose = None  
         self.laser_ranges = None
+        self.laser_angles = None
+        self.last_cmd = np.array([0.0, 0.0])
         self.control_step = 0
         self.task_start_time = time.time()
-        self.max_control_steps = 1000  # Set as needed
+        self.max_control_steps = 1000  
 
         # Publishers & Subscribers
         self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
@@ -40,6 +41,7 @@ class task_1(Node):
         self.create_subscription(LaserScan, '/scan', self.laser_callback, 10)
         self.create_subscription(Odometry, '/dynamic_goal_pose', self.goal_callback_odom, 10)
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
+        self.create_subscription(PoseStamped, '/goal_pose', self.goal_callback_ps, 10)
 
         # Timer for main control loop
         timer_period = 1.0 / self.get_parameter('control_rate').value
@@ -53,9 +55,9 @@ class task_1(Node):
             weight_obs=self.get_parameter('gamma').value,
             radius=self.get_parameter('collision_radius').value,
             collision_tol=self.get_parameter('collision_tolerance').value,
-            v_samples=10,  # or tune as needed
-            w_samples=20,  # or tune as needed
-            init_pose=[0, 0, 0],  # <-- Add this line
+            v_samples=10,  
+            w_samples=20, 
+            init_pose=[0, 0, 0],  
         )
 
     def laser_callback(self, msg):
@@ -68,13 +70,27 @@ class task_1(Node):
         ranges = np.where(np.isnan(ranges), min_val, ranges)
         ranges = np.where(np.isinf(ranges), max_val, ranges)
         ranges = np.clip(ranges, 0.0, self.get_parameter('max_lidar_range').value)
-        num_ranges = self.get_parameter('num_ranges').value
-        sector_size = len(ranges) // num_ranges
-        filtered = []
-        for i in range(num_ranges):
-            sector = ranges[i*sector_size:(i+1)*sector_size]
-            filtered.append(np.min(sector) if len(sector) > 0 else self.get_parameter('max_lidar_range').value)
-        self.laser_ranges = np.array(filtered)
+        num_ranges = min(int(self.get_parameter('num_ranges').value), len(ranges))
+
+        # Pre-compute beam angles from the real scan metadata
+        beam_angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment
+
+        # Downsample while preserving all beams (handles remainder beams as well)
+        filtered_ranges = []
+        filtered_angles = []
+        range_sectors = np.array_split(ranges, num_ranges)
+        angle_sectors = np.array_split(beam_angles, num_ranges)
+        for r_sector, a_sector in zip(range_sectors, angle_sectors):
+            if len(r_sector) == 0:
+                filtered_ranges.append(self.get_parameter('max_lidar_range').value)
+                filtered_angles.append(0.0)
+                continue
+            min_idx = int(np.argmin(r_sector))
+            filtered_ranges.append(r_sector[min_idx])
+            filtered_angles.append(a_sector[min_idx])
+
+        self.laser_ranges = np.array(filtered_ranges)
+        self.laser_angles = np.array(filtered_angles)
         self.get_logger().debug("Received LaserScan.")
         self.get_logger().info(f"Min laser range: {np.min(self.laser_ranges):.2f}")
 
@@ -101,7 +117,7 @@ class task_1(Node):
         self.get_logger().info(f"Received new goal (PoseStamped) at ({self.goal_pose.position.x:.2f}, {self.goal_pose.position.y:.2f})")
 
     def control_callback(self):
-        if self.goal_pose is None or self.laser_ranges is None or self.current_pose is None:
+        if self.goal_pose is None or self.laser_ranges is None or self.laser_angles is None or self.current_pose is None:
             return
 
         # Safety: stop if too close to obstacle
@@ -114,7 +130,11 @@ class task_1(Node):
         goal_xy = np.array([self.goal_pose.position.x, self.goal_pose.position.y])
 
         # Convert scan to obstacle coordinates
-        obstacles = self.scan_to_obstacles(self.current_pose, self.laser_ranges)
+        obstacles = self.scan_to_obstacles(self.current_pose, self.laser_ranges, self.laser_angles)
+
+        # Sync internal DWA robot state with the latest odometry and last command
+        self.dwa.robot.pose = self.current_pose.copy()
+        self.dwa.robot.vel = self.last_cmd.copy()
 
         # DWA: compute control
         v, w = self.dwa.compute_cmd(goal_xy, self.current_pose, obstacles)
@@ -125,6 +145,7 @@ class task_1(Node):
         cmd.linear.x = v
         cmd.angular.z = w
         self.cmd_pub.publish(cmd)
+        self.last_cmd = np.array([v, w])
 
         # Check for goal reached
         dist_to_goal = self.compute_distance(self.current_pose, self.goal_pose)
@@ -151,6 +172,7 @@ class task_1(Node):
     def stop_robot(self):
         cmd = Twist()
         self.cmd_pub.publish(cmd)
+        self.last_cmd = np.array([0.0, 0.0])
 
     def publish_event(self, event):
         msg = String()
@@ -171,14 +193,11 @@ class task_1(Node):
         dy = pose1[1] - pose2.position.y
         return math.hypot(dx, dy)
 
-    def scan_to_obstacles(self, robot_pose, scan_ranges):
+    def scan_to_obstacles(self, robot_pose, scan_ranges, scan_angles):
         # robot_pose: [x, y, theta]
-        num_ranges = len(scan_ranges)
-        angle_min = -math.pi / 2  # adjust if needed
-        angle_max = math.pi / 2   # adjust if needed
-        angles = np.linspace(angle_min, angle_max, num_ranges)
+        # scan_ranges/scan_angles: downsampled beams with matching indices
         obs = []
-        for r, a in zip(scan_ranges, angles):
+        for r, a in zip(scan_ranges, scan_angles):
             if r < self.get_parameter('max_lidar_range').value:
                 # Transform to global frame
                 x = robot_pose[0] + r * math.cos(robot_pose[2] + a)
