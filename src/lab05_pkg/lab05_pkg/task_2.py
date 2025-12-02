@@ -18,15 +18,17 @@ class task_2(Node):
     def __init__(self):
         super().__init__('task_2')
         # Parameters
-        self.declare_parameter('alpha', 0.12) # heading weight
-        self.declare_parameter('beta', 0.4)  # speed weight (for slowed term)
-        self.declare_parameter('gamma', 0.8) # obstacle weight
-        self.declare_parameter('delta', 0.15) # target-follow weight
-        self.declare_parameter('slowdown_dist', 2.0) # start slowing near goal
+        self.declare_parameter('alpha', 0.1) # heading weight
+        self.declare_parameter('beta', 0.6)  # speed weight (for slowed term)
+        self.declare_parameter('gamma', 0.7) # obstacle weight
+        self.declare_parameter('delta', 0.1) # target-follow weight
+        self.declare_parameter('slowdown_dist', 1.5) # start slowing near goal
         self.declare_parameter('follow_desired', 1.0) # preferred follow distance
-        self.declare_parameter('follow_band', 0.5) # tolerance for follow distance
-        self.declare_parameter('max_cmd_lin', 0.4) # clamp outgoing linear cmd
-        self.declare_parameter('max_cmd_ang', 0.6) # clamp outgoing angular cmd
+        self.declare_parameter('follow_band', 0.6) # tolerance for follow distance
+        self.declare_parameter('max_cmd_lin', 0.5) # clamp outgoing linear cmd
+        self.declare_parameter('max_cmd_ang', 0.5) # clamp outgoing angular cmd
+        self.declare_parameter('ang_smooth', 0.1) # smoothing factor for angular vel
+        self.declare_parameter('turn_slow_angle', 1.0) # rad, reduce v when turning hard
         self.declare_parameter('control_rate', 15.0)
         self.declare_parameter('collision_radius', 0.20)  # meters
         self.declare_parameter('collision_tolerance', 0.18)  # meters
@@ -150,6 +152,18 @@ class task_2(Node):
 
         # DWA: compute control with modified objective (slow near goal + target visibility)
         v, w = self.compute_cmd_custom(goal_xy, obstacles)
+
+        # Reduce linear speed if turning hard
+        turn_slow_angle = self.get_parameter('turn_slow_angle').value
+        if abs(w) > turn_slow_angle:
+            v *= 0.2
+        elif abs(w) > turn_slow_angle * 0.5:
+            v *= 0.5
+
+        # Smooth angular velocity to avoid oscillations
+        ang_smooth = self.get_parameter('ang_smooth').value
+        w = ang_smooth * self.last_cmd[1] + (1 - ang_smooth) * w
+
         # Clamp outgoing command to reduce oscillations
         max_lin = self.get_parameter('max_cmd_lin').value
         max_ang = self.get_parameter('max_cmd_ang').value
