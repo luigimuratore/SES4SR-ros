@@ -24,6 +24,9 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'task_1 = lab05_pkg.Task_1:main',
+            'task_2 = lab05_pkg.Task_2:main',
+            'task_3 = lab05_pkg.Task_3:main',
         ],
     },
 )
