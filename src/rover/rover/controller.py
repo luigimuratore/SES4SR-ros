@@ -26,7 +26,7 @@ class Controller(Node):
         self.turn_tolerance = self.get_parameter('turn_tolerance').value
 
         # Subscriptions
-        self.odom_sub = self.create_subscription(Odometry, '/odom_encoder', self.odom_callback, 10)
+        self.odom_sub = self.create_subscription(Odometry, '/odometry/fused', self.odom_callback, 10)
         self.imu_sub = self.create_subscription(Imu, '/imu/data_raw', self.imu_callback, 10)
         self.scan_sub = self.create_subscription(LaserScan, '/scan', self.scan_callback, 10)
 
@@ -62,9 +62,9 @@ class Controller(Node):
         self.get_logger().info('Controller initialized')
 
     def odom_callback(self, msg):
-        """Extract position and linear velocity from encoder odometry"""
+        """Extract fused odometry (encoder position + IMU yaw)"""
         if not self.odom_received:
-            self.get_logger().info('Encoder odometry received!')
+            self.get_logger().info('Fused odometry received!')
             self.odom_received = True
 
         self.last_odom_time = self.get_clock().now()
@@ -73,12 +73,12 @@ class Controller(Node):
         self.x = msg.pose.pose.position.x
         self.y = msg.pose.pose.position.y
 
-        # Yaw from encoder quaternion
+        # Yaw from IMU (accurate!)
         q = msg.pose.pose.orientation
         quat_list = [q.x, q.y, q.z, q.w]
         _, _, self.yaw = tf_transformations.euler_from_quaternion(quat_list)
 
-        # Linear velocity from encoder
+        # Velocity
         self.linear_velocity = msg.twist.twist.linear.x
 
     def imu_callback(self, msg):

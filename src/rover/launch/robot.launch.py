@@ -25,23 +25,14 @@ def generate_launch_description():
             executable='odom_node',
             name='odom_node',
             parameters=[{
-                'serial_port': '/dev/ttyUSB0',
+                'serial_port': '/dev/ttyUSB1',
                 'baud_rate': 115200,
                 'wheel_radius': 0.065,
                 'wheel_base': 0.30,
-                'ticks_per_rev': 1600
-            }],
-            output='screen'
-        ),
-        
-        # IMU node (publishes to /imu/data_raw)
-        Node(
-            package='rover',
-            executable='imu_node',
-            name='imu_node',
-            parameters=[{
-                'port': '/dev/ttyUSB1',
-                'baud_rate': 115200
+                'ticks_per_rev': 1600,
+                'min_velocity_threshold': 0.005,   # 5mm/s
+                'min_encoder_ticks': 2,            # Must move at least 2 ticks
+                'min_gyro_threshold': 0.05,        # 2.9°/s - ignore below this
             }],
             output='screen'
         ),
