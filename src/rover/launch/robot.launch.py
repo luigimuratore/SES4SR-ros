@@ -12,20 +12,25 @@ def generate_launch_description():
     )
     
     return LaunchDescription([
-        # Include LiDAR launch file
+        # Include LiDAR launch file with custom port parameter
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 os.path.join(ld19_launch_dir, 'lidar.launch.py')
-            )
+            ),
+            launch_arguments={
+                'port': '/dev/ttyUSB1',      # Override port here!
+                'frame_id': 'laser',
+                'topic_name': 'scan',
+            }.items()
         ),
 
-        # ODOM node (publishes to /odom_encoder)
+        # ODOM node (publishes to /odom_encoder and /odometry/fused)
         Node(
             package='rover',
             executable='odom_node',
             name='odom_node',
             parameters=[{
-                'serial_port': '/dev/ttyUSB1',
+                'serial_port': '/dev/ttyUSB0',     # Arduino
                 'baud_rate': 115200,
                 'wheel_radius': 0.065,
                 'wheel_base': 0.30,
@@ -37,16 +42,18 @@ def generate_launch_description():
             output='screen'
         ),
                 
-        # Controller (subscribes to /odom_encoder and /imu/data_raw)
+        # Controller (subscribes to /odometry/fused)
         Node(
             package='rover',
             executable='controller',
             name='controller',
             parameters=[{
-                'max_speed': 0.15,
-                'max_turn_rate': 1.0,
-                'obstacle_threshold': 0.4,
-                'is_active': True
+                'max_speed': 0.14,
+                'max_turn_rate': 0.85,
+                'obstacle_threshold': 0.45,
+                'is_active': True,
+                'turn_tolerance': 0.05,       # 2.9°
+                'min_turn_rate': 0.8,     # Prevents stalling
             }],
             output='screen'
         ),

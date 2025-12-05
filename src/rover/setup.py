@@ -29,12 +29,10 @@ setup(
         'console_scripts': [
             'controller = rover.controller:main',
             'encoder_node = rover.encoder_node:main',
-            'odometry_publisher = rover.odometry_publisher:main',
             'motor_driver = rover.motor_driver:main',
-            'lidar_test = rover.lidar_test:main',
             'imu_node = rover.imu_node:main',
             'odom_node = rover.odom_node:main',
-
+            'lidar_debug = rover.debug_lidar:main',
         ],
     },
 )

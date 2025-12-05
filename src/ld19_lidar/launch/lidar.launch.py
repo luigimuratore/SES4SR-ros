@@ -13,7 +13,7 @@ def generate_launch_description():
                 name="ld19_node",
                 output="screen",
                 parameters=[
-                    {"port": "/dev/ttyUSB0"},  # Changed from /dev/ld19_lidar
+                    {"port": "/dev/ttyUSB1"},  # Changed from /dev/ld19_lidar
                     {"frame_id": "laser"},
                     {"topic_name": "scan"},
                 ],
