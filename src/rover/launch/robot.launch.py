@@ -19,7 +19,7 @@ def generate_launch_description():
             )
         ),
 
-        # ODOM node
+        # ODOM node (publishes to /odom_encoder)
         Node(
             package='rover',
             executable='odom_node',
@@ -34,53 +34,19 @@ def generate_launch_description():
             output='screen'
         ),
         
-        # EKF for sensor fusion (encoder + IMU)
+        # IMU node (publishes to /imu/data_raw)
         Node(
-            package='robot_localization',
-            executable='ekf_node',
-            name='ekf_filter_node',
-            output='screen',
+            package='rover',
+            executable='imu_node',
+            name='imu_node',
             parameters=[{
-                'frequency': 50.0,
-                'two_d_mode': True,
-                'publish_tf': True,
-                'map_frame': 'map',
-                'odom_frame': 'odom',
-                'base_link_frame': 'base_link',
-                'world_frame': 'odom',
-                
-                'print_diagnostics': False,
-                
-                # Encoder odometry - position AND velocity
-                'odom0': '/odom_encoder',
-                'odom0_config': [
-                    True,  True,  False,  # x, y position ← ENABLED
-                    False, False, False,  # roll, pitch, yaw
-                    True,  False, False,  # vx, vy, vz
-                    False, False, False,  # vroll, vpitch, vyaw
-                    False, False, False   # ax, ay, az
-                ],
-                'odom0_differential': False,
-                'odom0_relative': False,
-                'odom0_queue_size': 10,
-                
-                # IMU - orientation and angular velocity
-                'imu0': '/imu/data_raw',
-                'imu0_config': [
-                    False, False, False,  # x, y, z position
-                    False, False, True,   # roll, pitch, YAW ← From IMU
-                    False, False, False,  # vx, vy, vz
-                    False, False, True,   # vroll, vpitch, VYAW ← From IMU
-                    False, False, False   # ax, ay, az
-                ],
-                'imu0_differential': False,
-                'imu0_relative': False,
-                'imu0_queue_size': 10,
-                'imu0_remove_gravitational_acceleration': True,
-            }]
+                'port': '/dev/ttyUSB1',
+                'baud_rate': 115200
+            }],
+            output='screen'
         ),
                 
-        # Controller
+        # Controller (subscribes to /odom_encoder and /imu/data_raw)
         Node(
             package='rover',
             executable='controller',
