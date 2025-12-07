@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.patches import Arc
 
-from .models.landmark_model import (
+from lab04_pkg.models.landmark_model import (
     landmark_range_bearing_sensor,
     landmark_model_prob,
     plot_sampled_poses,
@@ -106,3 +106,25 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+""" output ot put on the report:
+
+Probability density value: [0.8267090455998658, 0.702462142153935]
+
+============================================================
+TASK: Sampling poses from landmark model
+============================================================
+Robot pose: x=0.00, y=0.00, theta=45.00°
+Landmark position: x=5.00, y=2.00
+Measurement: range=5.20m, bearing=-14.24°
+
+============================================================
+Computing Jacobian H of measurement model
+============================================================
+Jacobian H (∂h/∂x) =
+[∂r/∂x    ∂r/∂y    ∂r/∂theta  ]   [ -0.9285   -0.3714    0.0000]
+[∂phi/∂x  ∂phi/∂y  ∂phi/∂theta] = [  0.0690   -0.1724   -1.0000]
+
+"""
