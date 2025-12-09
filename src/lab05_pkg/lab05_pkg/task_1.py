@@ -9,7 +9,11 @@ import math
 import time
 
 import sys
-sys.path.append('/home/ubuntu/Documents/SES4SR-ros/src/planning_control_methods/Controllers/DWA')
+import os
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+dwa_path = os.path.join(current_dir, '../../planning_control_methods/Controllers/DWA')
+sys.path.append(dwa_path)
 from dwa import DWA  
 
 class task_1(Node):
