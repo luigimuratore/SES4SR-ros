@@ -8,7 +8,7 @@ from nav_msgs.msg import Odometry
 from landmark_msgs.msg import LandmarkArray
 
 from lab04_pkg.models.ekf import RobotEKF
-from lab04_pkg.models.utils import normalize_angle, residual
+from lab04_pkg.models.utils import residual
 from lab04_pkg.models.probabilistic_models import landmark_range_bearing_model
 from lab04_pkg.task_0_b import compute_jacobians
 from lab04_pkg.models.utils import eval_gux, eval_Gt, eval_Vt
