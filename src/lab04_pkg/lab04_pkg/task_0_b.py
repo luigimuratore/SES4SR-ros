@@ -54,7 +54,13 @@ def main():
     # sensor parameters
     fov = math.pi/3
     max_range = 6.0
-    sigma = np.array([0.3, math.pi/24])
+    
+    # experiment with different uncertainties:
+    # sigma[0][1] => range uncertainty (in meters) and bearing uncertainty (in radians)
+    
+    sigma = np.array([0.3, math.pi/24])  # 0.3m, 7.5° -> Medium uncertainty
+    # sigma = np.array([0.1, math.pi/48])  # Low uncertainty: 0.1m, 3.75°
+    # sigma = np.array([0.8, math.pi/12])   # high uncertainty: 0.8m, 15°
 
     # compute measurements and associated probability
     z = []
