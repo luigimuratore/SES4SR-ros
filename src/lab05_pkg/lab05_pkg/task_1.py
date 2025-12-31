@@ -24,11 +24,13 @@ class task_1(Node):
         self.declare_parameter('beta', 1.0)  # speed weight
         self.declare_parameter('gamma', 0.4) # obstacle weight
         self.declare_parameter('control_rate', 15.0)
-        self.declare_parameter('collision_radius', 0.20)  # meters
-        self.declare_parameter('collision_tolerance', 0.18)  # meters
+        self.declare_parameter('collision_radius', 0.20)  
+        self.declare_parameter('collision_tolerance', 0.18) #
         self.declare_parameter('num_ranges', 18)
         self.declare_parameter('max_lidar_range', 3.5)
         self.declare_parameter('feedback_steps', 50)
+        self.declare_parameter('max_linear_vel', 0.21)  #  max linear velocity
+        self.declare_parameter('max_angular_vel', 3.0)  #  max angular velocity
         # State
         self.goal_pose = None
         self.current_pose = None  
@@ -60,7 +62,8 @@ class task_1(Node):
             radius=self.get_parameter('collision_radius').value,
             collision_tol=self.get_parameter('collision_tolerance').value,
             v_samples=10,  
-            w_samples=20, 
+            w_samples=20,
+            max_lin_vel=self.get_parameter('max_linear_vel').value,
             init_pose=[0, 0, 0],  
         )
 
@@ -142,7 +145,14 @@ class task_1(Node):
 
         # DWA: compute control
         v, w = self.dwa.compute_cmd(goal_xy, self.current_pose, obstacles)
-        self.get_logger().info(f"DWA output: v={v:.2f}, w={w:.2f}")
+        
+        # Clamp velocities to safe limits
+        max_v = self.get_parameter('max_linear_vel').value
+        max_w = self.get_parameter('max_angular_vel').value
+        v = np.clip(v, -max_v, max_v)
+        w = np.clip(w, -max_w, max_w)
+        
+        self.get_logger().info(f"DWA output (clamped): v={v:.2f}, w={w:.2f}")
 
         # Publish command
         cmd = Twist()

@@ -26,7 +26,7 @@ setup(
         'console_scripts': [
             'task_1 = lab05_pkg.task_1:main',
             'task_2 = lab05_pkg.task_2:main',
-            'task_2_metrics = lab05_pkg.task_2_metrics:main',
+            'task_1_metrics = lab05_pkg.task_1_metrics:main',
             'task_3 = lab05_pkg.task_3:main',
             'task_3_original = lab05_pkg.task_3_original:main',
         ],
