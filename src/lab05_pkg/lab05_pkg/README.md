@@ -86,44 +86,52 @@ The velocity reduction component ensures the robot slows down as it approaches t
 
 ### Video Demonstrations
 
-#### Demonstration 1: Basic Tracking
-<video src="../media/IMG_7640.MOV" controls width="640">
-  Your browser does not support the video tag.
-</video>
+#### Demonstration 1
 
-*Target tracking in open environment with minimal obstacles.*
+https://github.com/user-attachments/assets/4e507982-ced5-4998-9c22-597da9e6cfda
 
-#### Demonstration 2: Obstacle Avoidance
-<video src="../media/IMG_7642.MOV" controls width="640">
-  Your browser does not support the video tag.
-</video>
+*Scrivere qualcosa.*
 
-*Dynamic tracking while navigating around obstacles.*
+#### Demonstration 2
 
-#### Demonstration 3: Complex Environment
-<video src="../media/IMG_7643.MOV" controls width="640">
-  Your browser does not support the video tag.
-</video>
+https://github.com/user-attachments/assets/47603892-ea69-48b0-9695-75380d90791e
 
-*Performance in cluttered environment with multiple obstacles.*
+*Scrivere qualcosa.*
 
-#### Demonstration 4: Extended Tracking
-<video src="../media/IMG_7644.MOV" controls width="640">
-  Your browser does not support the video tag.
-</video>
 
-*Long-duration tracking showing stability and robustness.*
+#### Demonstration 3
 
+https://github.com/user-attachments/assets/feff8794-6225-4bff-a3a4-d4e3eea646cb
+
+*Scrivere qualcosa.*
+
+#### Demonstration 4
+
+https://github.com/user-attachments/assets/9846eefc-f319-4134-98a5-dbd0dcc499c2
+
+*Scrivere qualcosa.*
 
 ---
 
 ## Results
 
-### Typical Performance Metrics
+### Typical Bad Performance Metrics
 
 ```
 === METRICS ===
 Track Time: 85.3% over 120.5s
+Distance RMSE: 0.089m
+Bearing RMSE: 12.4°
+Avg Obstacle Dist: 1.245m
+Min Obstacle Dist: 0.182m
+Bearing Stats: avg=-2.3°, max_dev=45.2°, samples=1807
+```
+
+### Typical Good Performance Metrics
+
+```
+=== METRICS ===
+Track Time: 100% over 120.5s
 Distance RMSE: 0.089m
 Bearing RMSE: 12.4°
 Avg Obstacle Dist: 1.245m
