@@ -110,6 +110,62 @@ https://github.com/user-attachments/assets/9846eefc-f319-4134-98a5-dbd0dcc499c2
 
 ---
 
+### Plots
+
+#### Odometry Tracking Comparison
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <img src="../media/Simulation/error_heading/odom_error_heading.png" width="100%" alt="Trajectory 1"/>
+        <br/>
+        <em>Bad DWA Parameters - Heading and velocity Error</em>
+      </td>
+      <td align="center">
+        <img src="../media/Simulation/error_velocity/odom_errori_vel.png" width="100%" alt="Trajectory 2"/>
+        <br/>
+        <em>Bad DWA Parameters - Heading Error</em>
+      </td>
+      <td align="center">
+        <img src="../media/Simulation/odom_error1.png" width="100%" alt="Trajectory 3"/>
+        <br/>
+        <em>Bad DWA Parameters - Velocity Error</em>
+      </td>
+    </tr>
+  </table>
+</div>
+
+*Blue: Robot odometry trajectory | Red: Target goal trajectory*
+
+#### Velocity profile Comparison
+
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <img src="../media/Simulation/vel1_error.png" width="100%" alt="Velocity 1"/>
+        <br/>
+        <em>Linear Velocity (Bad Parameters 1)</em>
+      </td>
+      <td align="center">
+        <img src="../media/Simulation/vel2_error.png" width="100%" alt="Velocity 2"/>
+        <br/>
+        <em>Linear Velocity (Bad Parameters 2)</em>
+      </td>
+      <td align="center">
+        <img src="../media/Simulation/vel_good.png" width="100%" alt="Velocity 3"/>
+        <br/>
+        <em>Linear Velocity (Optimized)</em>
+      </td>
+    </tr>
+  </table>
+</div>
+
+
+
+---
+
 ### Metrics results
 
 #### Simulation test - Bad DWA parameters
