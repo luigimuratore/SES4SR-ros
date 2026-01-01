@@ -218,7 +218,7 @@ colcon build --packages-select lab05_pkg
 source install/setup.bash
 ```
 
-### Launch the System
+### Launch the Node
 
 ```bash
 ros2 run lab05_pkg task_1_metrics
@@ -228,6 +228,7 @@ ros2 run lab05_pkg task_1_metrics
 
 ```bash
 ros2 topic echo /metrics
+ros2 topic echo /dwa_feedback
 ```
 
 ---
