@@ -208,9 +208,9 @@ Min Obstacle Dist: 0.1m
 ---
 ---
 
-## Running the Code
+### Running the Code
 
-### Build the Package
+#### Build the Package
 
 ```bash
 cd ~/SES4SR-ros
@@ -218,13 +218,13 @@ colcon build --packages-select lab05_pkg
 source install/setup.bash
 ```
 
-### Launch the Node
+#### Launch the Node
 
 ```bash
 ros2 run lab05_pkg task_1_metrics
 ```
 
-### Monitor Metrics
+#### Monitor Metrics
 
 ```bash
 ros2 topic echo /metrics
