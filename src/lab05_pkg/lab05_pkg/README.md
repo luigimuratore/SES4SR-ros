@@ -2,25 +2,26 @@
 
 ### Overview
 
-This lab implements a dynamic window approach DWA system to track a moving target while avoiding obstacles, computing real-time metrics for tracking performance, distance errors, bearing errors, and obstacle proximity.
+This lab implements a dynamic window approach DWA system to track a moving target while avoiding obstacles, computing real-time metrics.
 
 ---
 
 ### System Architecture
 
 The system consists of:
-- **ROS2 Node**: Main control node
-- **DWA Planner**: Path planning with obstacle avoidance with 
+- **ROS2 Node**: Main controller
+- **DWA Planner**: Path planning, obstacle avoidance with DWA
 - **Metrics System**: Real-time tracking performance evaluation
-- **Sensors**: LiDAR for obstacle detection, Odometry for localization
+- **Sensors**: LiDAR for obstacle detection, 
+- **Odometry**: Localization
 
 ---
 ### Topics
 
 **Subscriber:**
-- `/scan` - LaserScan data for obstacle detection
-- `/dynamic_goal_pose` - Target pose updated (Simulation)
-- `/camera/landmarks` - Target pose updated (Real-World)
+- `/scan` - LiDAR data for obstacle detection
+- `/dynamic_goal_pose` - Target pose updates (Simulation)
+- `/camera/landmarks` - Target pose updates (Real-World)
 - `/odom` - Current robot odometry
 
 **Publisher:**
@@ -48,13 +49,9 @@ Where:
 $$J = \alpha \cdot heading + \beta \cdot vel' + \gamma \cdot dist_{obst} + \delta \cdot dist_{target}$$
 
 Where:
-- $vel'$ = velocity reduction term when approaching target
-- $dist_{obst}$ = distance to nearest obstacle
-- $dist_{target}$ = distance to target (used for velocity modulation)
 - $\delta$ = target distance weight (0.5)
 
-The velocity reduction component ensures the robot slows down as it approaches the target, preventing overshoot and maintaining stable tracking at the desired following distance.
-
+##### The velocity reduction component ensures the robot slows down as it approaches the target.
 ---
 
 
@@ -90,69 +87,69 @@ The velocity reduction component ensures the robot slows down as it approaches t
 
 https://github.com/user-attachments/assets/4e507982-ced5-4998-9c22-597da9e6cfda
 
-*Scrivere qualcosa.*
+*Real-world test - Trajectory 1.*
 
 #### Demonstration 2
 
 https://github.com/user-attachments/assets/47603892-ea69-48b0-9695-75380d90791e
 
-*Scrivere qualcosa.*
+*Real-world test - Trajectory 2.*
 
 
 #### Demonstration 3
 
 https://github.com/user-attachments/assets/feff8794-6225-4bff-a3a4-d4e3eea646cb
 
-*Scrivere qualcosa.*
+*Real-world test - Trajectory 3.*
 
 #### Demonstration 4
 
 https://github.com/user-attachments/assets/9846eefc-f319-4134-98a5-dbd0dcc499c2
 
-*Scrivere qualcosa.*
+*Real-world test - Trajectory 4.*
 
 ---
 
-## Results
+### Metrics results
 
-### Typical Bad Performance Metrics
-
-```
-=== METRICS ===
-Track Time: 85.3% over 120.5s
-Distance RMSE: 0.089m
-Bearing RMSE: 12.4°
-Avg Obstacle Dist: 1.245m
-Min Obstacle Dist: 0.182m
-Bearing Stats: avg=-2.3°, max_dev=45.2°, samples=1807
-```
-
-### Typical Good Performance Metrics
+#### Simulation test - Bad DWA parameters
 
 ```
 === METRICS ===
-Track Time: 100% over 120.5s
-Distance RMSE: 0.089m
-Bearing RMSE: 12.4°
-Avg Obstacle Dist: 1.245m
-Min Obstacle Dist: 0.182m
-Bearing Stats: avg=-2.3°, max_dev=45.2°, samples=1807
+Success rate: 90%
+Track Time: 85% over 120.5s
+Distance RMSE: 0.58m
+Bearing RMSE: 25.91°
+Avg Obstacle Dist: 2.25m
+Min Obstacle Dist: 0.45m
 ```
 
-### Key Observations
+#### Simulation test - Optimized DWA parameters
 
-1. **High Tracking Percentage**: System maintains tracking >80% of time
-2. **Low Distance Error**: RMSE typically <10cm from desired distance
-3. **Good Angular Alignment**: Bearing errors within acceptable range
-4. **Safe Navigation**: Maintains safe distances from obstacles
+```
+=== METRICS ===
+Success rate: 100%
+Track Time: 100% over 110s
+Distance RMSE: 0.24m
+Bearing RMSE: 12.10°
+Avg Obstacle Dist: 2.21m
+Min Obstacle Dist: 0.19m
+```
 
-### Lost Tracking Scenarios
+#### Average real-world test - Optimized DWA parameters
 
-The system detects three types of tracking loss:
-- `TOO_FAR`: Target distance exceeds 2.0m threshold
-- `WRONG_HEADING`: Bearing error exceeds 90° (wrong direction)
-- `MOVING_AWAY`: Distance increasing despite forward motion
+```
+=== METRICS ===
+Success rate: 90%
+Track Time: 60%
+Distance RMSE: 0.5m
+Bearing RMSE: 30°
+Avg Obstacle Dist: 1m
+Min Obstacle Dist: 0.1m
+```
 
+
+---
 ---
 
 ## Running the Code
@@ -180,18 +177,3 @@ ros2 topic echo /metrics
 ---
 
 
-### Key Features
-
-#### 1. Dynamic Target Tracking
-#### 2. Obstacle Avoidance
-#### 3. Performance Metrics
-- **Tracking Time Percentage**: Time successfully tracking vs. total time
-- **Distance RMSE**: Root Mean Square Error from desired distance
-- **Bearing RMSE**: Angular alignment error with target
-- **Obstacle Proximity**: Average and minimum distances to obstacles
-
-#### 4. Lost Detection
-The system detects when tracking is lost based on:
-- Distance exceeding threshold (2.0m)
-- Bearing error exceeding 90°
-- Moving away from target (distance increasing)
