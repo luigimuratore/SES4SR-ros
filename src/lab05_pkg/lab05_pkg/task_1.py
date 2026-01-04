@@ -64,8 +64,7 @@ class task_1(Node):
             v_samples=10,  
             w_samples=20,
             max_lin_vel=self.get_parameter('max_linear_vel').value,
-            init_pose=[0, 0, 0],  
-        )
+            init_pose=[0, 0, 0],)
 
     def laser_callback(self, msg):
         ranges = np.array(msg.ranges)
@@ -133,18 +132,13 @@ class task_1(Node):
             self.publish_event('Collision')
             return
 
-        # Convert goal_pose to [x, y]
-        goal_xy = np.array([self.goal_pose.position.x, self.goal_pose.position.y])
+        goal_xy = np.array([self.goal_pose.position.x, self.goal_pose.position.y]) # Convert goal_pose to [x, y]
+        obstacles = self.scan_to_obstacles(self.current_pose, self.laser_ranges, self.laser_angles) # Convert scan to obstacle coordinates
 
-        # Convert scan to obstacle coordinates
-        obstacles = self.scan_to_obstacles(self.current_pose, self.laser_ranges, self.laser_angles)
-
-        # Sync internal DWA robot state with the latest odometry and last command
         self.dwa.robot.pose = self.current_pose.copy()
         self.dwa.robot.vel = self.last_cmd.copy()
-
-        # DWA: compute control
-        v, w = self.dwa.compute_cmd(goal_xy, self.current_pose, obstacles)
+        
+        v, w = self.dwa.compute_cmd(goal_xy, self.current_pose, obstacles) # DWA: compute control
         
         # Clamp velocities to safe limits
         max_v = self.get_parameter('max_linear_vel').value

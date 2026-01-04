@@ -46,10 +46,7 @@ class task_1(Node):
         self.max_control_steps = 100000
         self.collision_detected = False
         self.goals_reached = 0
-        self.failures = {
-            'Timeout': 0,
-            'Collision': 0,
-        }
+        self.failures = {'Timeout': 0, 'Collision': 0,}
         self.prev_distance_to_target = None  # Track if getting closer/farther
 
         # Metrics tracking
@@ -70,8 +67,7 @@ class task_1(Node):
         self.create_subscription(Odometry, '/dynamic_goal_pose', self.goal_callback_odom, 10)
         self.create_subscription(Odometry, '/odom', self.odom_callback, 10)
         self.create_subscription(PoseStamped, '/goal_pose', self.goal_callback_ps, 10)
-        # REMOVE ground_truth subscription - it's your own robot!
-        # self.create_subscription(Odometry, '/ground_truth', self.ground_truth_callback, 10)
+        self.create_subscription(Odometry, '/ground_truth', self.ground_truth_callback, 10)
 
         # Timer for main control loop
         timer_period = 1.0 / self.get_parameter('control_rate').value
@@ -91,8 +87,7 @@ class task_1(Node):
             v_samples=10,  
             w_samples=20,
             max_lin_vel=self.get_parameter('max_linear_vel').value,
-            init_pose=[0, 0, 0],  
-        )
+            init_pose=[0, 0, 0],)
 
     def ground_truth_callback(self, msg):
         """Callback for target robot's ground truth pose from /ground_truth"""
@@ -187,15 +182,12 @@ class task_1(Node):
 
     def goal_callback_ps(self, msg):
         self.goal_pose = msg.pose
-        # Don't reset control_step - allow goal changes mid-navigation
-        # self.control_step = 0  # REMOVE THIS
         # Only reset start time if this is the first goal
         if self.task_start_time is None:
             self.task_start_time = time.time()
         self.get_logger().info(f"Received new goal (PoseStamped) at ({self.goal_pose.position.x:.2f}, {self.goal_pose.position.y:.2f})")
 
-    def compute_tracking_metrics(self):
-        """Compute tracking metrics with improved lost detection"""
+    def compute_tracking_metrics(self): 
         if self.target_ground_truth is None or self.current_pose is None:
             return False, "NO_DATA"
         
@@ -224,15 +216,11 @@ class task_1(Node):
         max_bearing_error_deg = self.get_parameter('max_bearing_error').value
         max_bearing_error_rad = math.radians(max_bearing_error_deg)
         
-        # You're TRACKING if:
-        # 1. Within distance range
-        # 2. Heading aligned with target (bearing not too large)
-        # 3. NOT moving away from target
+        # You're TRACKING if: 1. Within distance range, 2. Heading aligned with target (bearing not too large) 3. NOT moving away from target
         is_tracking = (
             actual_distance <= tracking_threshold and
             abs(bearing_angle) <= max_bearing_error_rad and
-            not distance_increasing
-        )
+            not distance_increasing)
         
         # Determine reason for losing track
         lost_reason = "OK"
@@ -254,13 +242,11 @@ class task_1(Node):
         
         self.get_logger().debug(
             f"Distance: {actual_distance:.2f}m, Bearing: {math.degrees(bearing_angle):.1f}°, "
-            f"Dist_change: {'+' if distance_increasing else '-'}, Tracking: {is_tracking}, Reason: {lost_reason}"
-        )
-        
+            f"Dist_change: {'+' if distance_increasing else '-'}, Tracking: {is_tracking}, Reason: {lost_reason}")
+    
         return is_tracking, lost_reason
 
-    def check_goal_completion(self):
-        """Check if the previous goal was successfully reached"""
+    def check_goal_completion(self): #Check if the previous goal was successfully reached
         if self.goal_pose is None or self.current_pose is None:
             return
         
@@ -279,11 +265,9 @@ class task_1(Node):
         if self.goal_pose is None or self.laser_ranges is None or self.laser_angles is None or self.current_pose is None:
             return
 
-        # Compute tracking metrics
-        is_tracking, lost_reason = self.compute_tracking_metrics()
+        is_tracking, lost_reason = self.compute_tracking_metrics()   # Compute tracking metrics
 
-        # Safety: stop if too close to obstacle (only count collision once)
-        if np.min(self.laser_ranges) < self.get_parameter('collision_tolerance').value:
+        if np.min(self.laser_ranges) < self.get_parameter('collision_tolerance').value:   # stop if too close to obstacle (only count collision once)
             if not self.collision_detected:
                 self.failures['Collision'] += 1
                 self.collision_detected = True
@@ -291,18 +275,13 @@ class task_1(Node):
             self.stop_robot()
             return
 
-        # Convert goal_pose to [x, y]
-        goal_xy = np.array([self.goal_pose.position.x, self.goal_pose.position.y])
+        goal_xy = np.array([self.goal_pose.position.x, self.goal_pose.position.y])  # Convert goal_pose to [x, y]
+        obstacles = self.scan_to_obstacles(self.current_pose, self.laser_ranges, self.laser_angles) # Convert scan to obstacle coordinates
 
-        # Convert scan to obstacle coordinates
-        obstacles = self.scan_to_obstacles(self.current_pose, self.laser_ranges, self.laser_angles)
-
-        # Sync internal DWA robot state
         self.dwa.robot.pose = self.current_pose.copy()
         self.dwa.robot.vel = self.last_cmd.copy()
 
-        # DWA: compute control
-        v, w = self.dwa.compute_cmd(goal_xy, self.current_pose, obstacles)
+        v, w = self.dwa.compute_cmd(goal_xy, self.current_pose, obstacles) # DWA: compute control
         
         # Clamp velocities
         max_v = self.get_parameter('max_linear_vel').value
@@ -325,8 +304,7 @@ class task_1(Node):
             
             self.get_logger().info(
                 f"[{tracking_status}] v={v:.2f}, w={w:.2f} | "
-                f"dist_target={dist_to_gt:.2f}m, bearing={math.degrees(bearing_angle):.1f}°"
-            )
+                f"dist_target={dist_to_gt:.2f}m, bearing={math.degrees(bearing_angle):.1f}°")
         else:
             self.get_logger().info(f"v={v:.2f}, w={w:.2f} | dist_goal={dist_to_goal:.2f}m (no ground truth)")
 
@@ -355,12 +333,10 @@ class task_1(Node):
             self.publish_feedback(dist_to_goal)
 
     def publish_metrics(self):
-        """Publish computed metrics periodically"""
         if self.total_time == 0:
             return
         
-        # Tracking time percentage
-        tracking_percentage = (self.tracking_time / self.total_time) * 100.0
+        tracking_percentage = (self.tracking_time / self.total_time) * 100.0 # Tracking time percentage
         
         # RMSE for distance and bearing
         distance_rmse = 0.0
@@ -402,8 +378,7 @@ class task_1(Node):
         metrics_msg.data = (
             f"Track:{tracking_percentage:.1f}% T:{self.total_time:.1f}s "
             f"DistRMSE:{distance_rmse:.3f}m BearRMSE:{bearing_rmse_deg:.1f}° "
-            f"ObstAvg:{avg_obstacle_dist:.2f}m Min:{min_obstacle_dist:.2f}m "
-        )
+            f"ObstAvg:{avg_obstacle_dist:.2f}m Min:{min_obstacle_dist:.2f}m ")
         
         self.metrics_pub.publish(metrics_msg)
         self.get_logger().info(
@@ -413,8 +388,7 @@ class task_1(Node):
             f"Bearing RMSE: {bearing_rmse_deg:.2f}°\n"
             f"Avg Obstacle Dist: {avg_obstacle_dist:.3f}m\n"
             f"Min Obstacle Dist: {min_obstacle_dist:.3f}m\n"
-            f"Bearing Stats: avg={avg_bearing:.1f}°, max_dev={max_bearing:.1f}°, samples={len(self.bearing_errors)}"
-        )
+            f"Bearing Stats: avg={avg_bearing:.1f}°, max_dev={max_bearing:.1f}°, samples={len(self.bearing_errors)}")
 
     def stop_robot(self):
         cmd = Twist()

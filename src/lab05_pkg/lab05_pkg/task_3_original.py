@@ -62,8 +62,7 @@ class task_3(Node):
             collision_tol=self.get_parameter('collision_tolerance').value,
             v_samples=10,  
             w_samples=20, 
-            init_pose=[0, 0, 0],  
-        )
+            init_pose=[0, 0, 0],)
 
     def laser_callback(self, msg):
         ranges = np.array(msg.ranges)
@@ -109,11 +108,7 @@ class task_3(Node):
         self.current_pose = np.array([pos.x, pos.y, yaw])
         self.get_logger().debug(f"Odometry: {self.current_pose}")
 
-    def landmark_callback(self, msg):
-        """
-        Process AprilTag landmarks from RGB-D camera.
-        Transform range and bearing measurements to X-Y coordinates in odom frame.
-        """
+    def landmark_callback(self, msg): # Process AprilTag landmarks from RGB-D camera and Transform range and bearing measurements to X-Y coordinates in odom frame.
         if len(msg.landmarks) == 0:
             self.get_logger().debug("No landmarks detected.")
             return
@@ -148,31 +143,25 @@ class task_3(Node):
         self.get_logger().info(
             f"Detected AprilTag (ID: {landmark.id}): "
             f"range={range_to_landmark:.2f}m, bearing={math.degrees(bearing_to_landmark):.1f}deg -> "
-            f"Goal in odom: ({goal_x:.2f}, {goal_y:.2f})"
-        )
+            f"Goal in odom: ({goal_x:.2f}, {goal_y:.2f})")
 
     def control_callback(self):
         if self.goal_pose is None or self.laser_ranges is None or self.laser_angles is None or self.current_pose is None:
             return
 
-        # Safety: stop if too close to obstacle
-        if np.min(self.laser_ranges) < self.get_parameter('collision_tolerance').value:
+        if np.min(self.laser_ranges) < self.get_parameter('collision_tolerance').value:  #stop if too close to obstacle
             self.stop_robot()
             self.publish_event('Collision')
             return
 
-        # Convert goal_pose to [x, y]
-        goal_xy = np.array([self.goal_pose.position.x, self.goal_pose.position.y])
-
-        # Convert scan to obstacle coordinates
-        obstacles = self.scan_to_obstacles(self.current_pose, self.laser_ranges, self.laser_angles)
+        goal_xy = np.array([self.goal_pose.position.x, self.goal_pose.position.y]) # Convert goal_pose to [x, y]
+        obstacles = self.scan_to_obstacles(self.current_pose, self.laser_ranges, self.laser_angles) # Convert scan to obstacle coordinates
 
         # Sync internal DWA robot state with the latest odometry and last command
         self.dwa.robot.pose = self.current_pose.copy()
         self.dwa.robot.vel = self.last_cmd.copy()
 
-        # DWA: compute control
-        v, w = self.dwa.compute_cmd(goal_xy, self.current_pose, obstacles)
+        v, w = self.dwa.compute_cmd(goal_xy, self.current_pose, obstacles) # DWA: compute control
         self.get_logger().info(f"DWA output: v={v:.2f}, w={w:.2f}")
 
         # Publish command

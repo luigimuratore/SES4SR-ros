@@ -33,8 +33,7 @@ class Controller(Node):
 
         self.publisher_.publish(msg)
         self.get_logger().info(
-            f'Published: linear.x={msg.linear.x}, linear.y={msg.linear.y}, phase={self.phase+1} ({direction}), N={self.N}'
-        )
+            f'Published: linear.x={msg.linear.x}, linear.y={msg.linear.y}, phase={self.phase+1} ({direction}), N={self.N}')
 
         self.count += 1
         if self.count >= self.N:
