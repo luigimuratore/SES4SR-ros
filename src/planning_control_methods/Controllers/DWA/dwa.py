@@ -243,8 +243,3 @@ class DWA():
             score_obstacle[score_obstacle < self.robot.radius + self.collision_tol] = -100 # heavy penalty for collision
                
         return score_obstacle
-
-
-
-
-

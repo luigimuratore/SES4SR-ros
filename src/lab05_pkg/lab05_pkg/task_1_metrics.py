@@ -69,12 +69,10 @@ class task_1(Node):
         self.create_subscription(PoseStamped, '/goal_pose', self.goal_callback_ps, 10)
         self.create_subscription(Odometry, '/ground_truth', self.ground_truth_callback, 10)
 
-        # Timer for main control loop
+        # Timer 
         timer_period = 1.0 / self.get_parameter('control_rate').value
         self.timer = self.create_timer(timer_period, self.control_callback)
-        
-        # Timer for metrics publishing (every 5 seconds)
-        self.metrics_timer = self.create_timer(5.0, self.publish_metrics)
+        self.metrics_timer = self.create_timer(5.0, self.publish_metrics) # every 5 seconds
 
         # DWA Planner
         self.dwa = DWA(
@@ -90,7 +88,6 @@ class task_1(Node):
             init_pose=[0, 0, 0],)
 
     def ground_truth_callback(self, msg):
-        """Callback for target robot's ground truth pose from /ground_truth"""
         pos = msg.pose.pose.position
         ori = msg.pose.pose.orientation
         siny_cosp = 2 * (ori.w * ori.z + ori.x * ori.y)
@@ -114,10 +111,9 @@ class task_1(Node):
         ranges = np.clip(ranges, 0.0, self.get_parameter('max_lidar_range').value)
         num_ranges = min(int(self.get_parameter('num_ranges').value), len(ranges))
 
-        # Pre-compute beam angles from the real scan metadata
-        beam_angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment
+        beam_angles = msg.angle_min + np.arange(len(ranges)) * msg.angle_increment # angle for each beam
 
-        # Downsample while preserving all beams (handles remainder beams as well)
+        # Downsample 
         filtered_ranges = []
         filtered_angles = []
         range_sectors = np.array_split(ranges, num_ranges)
@@ -145,6 +141,7 @@ class task_1(Node):
     def odom_callback(self, msg):
         pos = msg.pose.pose.position
         ori = msg.pose.pose.orientation
+
         # Convert quaternion to yaw
         siny_cosp = 2 * (ori.w * ori.z + ori.x * ori.y)
         cosy_cosp = 1 - 2 * (ori.y * ori.y + ori.z * ori.z)
@@ -154,24 +151,19 @@ class task_1(Node):
 
     def goal_callback_odom(self, msg):
         self.goal_pose = msg.pose.pose
-        
-        # Use the goal pose as target position
-        pos = msg.pose.pose.position
+        pos = msg.pose.pose.position    # Use the goal pose as target position
         
         # Calculate target's heading from velocity (change in position)
         if self.prev_target_ground_truth is not None and self.target_ground_truth is not None:
             dx = pos.x - self.target_ground_truth[0]
             dy = pos.y - self.target_ground_truth[1]
             
-            # If target moved, use velocity direction as heading
-            if math.hypot(dx, dy) > 0.01:
+            if math.hypot(dx, dy) > 0.01:                   # If target moved, use velocity direction as heading
                 target_yaw = math.atan2(dy, dx)
             else:
-                # Keep previous heading if stationary
-                target_yaw = self.target_ground_truth[2]
+                target_yaw = self.target_ground_truth[2]    # Keep previous heading if stationary
         else:
-            # First message, use zero heading
-            target_yaw = 0.0
+            target_yaw = 0.0 # Default heading if no previous data
         
         self.prev_target_ground_truth = self.target_ground_truth
         self.target_ground_truth = np.array([pos.x, pos.y, target_yaw])
@@ -182,8 +174,8 @@ class task_1(Node):
 
     def goal_callback_ps(self, msg):
         self.goal_pose = msg.pose
-        # Only reset start time if this is the first goal
-        if self.task_start_time is None:
+
+        if self.task_start_time is None:         # Only reset start time if this is the first goal
             self.task_start_time = time.time()
         self.get_logger().info(f"Received new goal (PoseStamped) at ({self.goal_pose.position.x:.2f}, {self.goal_pose.position.y:.2f})")
 
@@ -201,7 +193,7 @@ class task_1(Node):
         dy = self.target_ground_truth[1] - self.current_pose[1]
         actual_distance = math.hypot(dx, dy)
         
-        # Bearing: difference between your heading and target's heading
+        # Bearing: difference between robot heading and target's heading
         bearing_angle = self.target_ground_truth[2] - self.current_pose[2]
         bearing_angle = math.atan2(math.sin(bearing_angle), math.cos(bearing_angle))
         
@@ -211,30 +203,28 @@ class task_1(Node):
             distance_increasing = actual_distance > self.prev_distance_to_target + 0.5  # 5cm tolerance
         self.prev_distance_to_target = actual_distance
         
-        # Tracking criteria
+        # Tracking 
         tracking_threshold = self.get_parameter('tracking_threshold').value
         max_bearing_error_deg = self.get_parameter('max_bearing_error').value
         max_bearing_error_rad = math.radians(max_bearing_error_deg)
         
-        # You're TRACKING if: 1. Within distance range, 2. Heading aligned with target (bearing not too large) 3. NOT moving away from target
+        # TRACKING if: 1. Within distance range, 2. Heading aligned with target (bearing not too large) 3. NOT moving away from target
         is_tracking = (
             actual_distance <= tracking_threshold and
             abs(bearing_angle) <= max_bearing_error_rad and
             not distance_increasing)
         
-        # Determine reason for losing track
+        # reason for losing track
         lost_reason = "OK"
         if actual_distance > tracking_threshold:
             lost_reason = "TOO_FAR"
         elif abs(bearing_angle) > max_bearing_error_rad:
-            lost_reason = f"WRONG_HEADING({math.degrees(bearing_angle):.0f}°)"
+            lost_reason = f"WRONG_DIRECTION({math.degrees(bearing_angle):.0f}°)"
         elif distance_increasing:
             lost_reason = "MOVING_AWAY"
         
         if is_tracking:
-            self.tracking_time += dt
-            
-            # Only record errors when tracking
+            self.tracking_time += dt            
             desired_distance = self.get_parameter('desired_distance').value
             distance_error = actual_distance - desired_distance
             self.distance_errors.append(distance_error)
