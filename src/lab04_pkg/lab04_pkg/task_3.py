@@ -6,6 +6,7 @@ from rclpy.node import Node
 from ament_index_python.packages import get_package_share_directory
 from nav_msgs.msg import Odometry
 from landmark_msgs.msg import LandmarkArray
+from sensor_msgs.msg import Imu
 
 from lab04_pkg.models.ekf import RobotEKF
 from lab04_pkg.models.utils import (normalize_angle, residual, eval_gux, eval_Gt, eval_Vt, eval_gux_5d, eval_Gt_5d, eval_Vt_5d)
@@ -22,13 +23,14 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
         self.declare_parameter('initial_x', 0.0)
         self.declare_parameter('initial_y', 0.77)
         self.declare_parameter('initial_theta', 0.0)
-        self.declare_parameter('process_noise_v', 0.0)
-        self.declare_parameter('process_noise_omega', 0.0)
-        self.declare_parameter('measurement_noise_range', 1.0)
-        self.declare_parameter('measurement_noise_bearing', 1.00)
-        self.declare_parameter('encoder_noise_v', 1.00)
-        self.declare_parameter('encoder_noise_omega', 1.00)
-        self.declare_parameter('imu_noise_omega', 1.00)
+
+        self.declare_parameter('process_noise_v', 0.1)
+        self.declare_parameter('process_noise_omega', 0.05)
+        self.declare_parameter('measurement_noise_range', 0.1)
+        self.declare_parameter('measurement_noise_bearing', 0.05)
+        self.declare_parameter('encoder_noise_v', 0.05)
+        self.declare_parameter('encoder_noise_omega', 0.05)
+        self.declare_parameter('imu_noise_omega', 0.02) 
 
         self.prediction_rate = self.get_parameter('prediction_rate').value
         initial_x = self.get_parameter('initial_x').value
@@ -87,6 +89,7 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
         # Subscribers
         self.odom_sub = self.create_subscription(Odometry,'/odom',self.odom_callback,10)
         self.landmark_sub = self.create_subscription(LandmarkArray,'/landmarks', self.landmark_callback,10) # '/camera/landmarks' on real robot
+        self.imu_sub = self.create_subscription(Imu,'/imu',self.imu_callback,10)  # IMU angular velocity only
 
         # Publisher
         self.ekf_pub = self.create_publisher(Odometry, '/ekf', 10)
@@ -121,18 +124,72 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
 
      
     # CALLBACKS
-    def odom_callback(self, msg: Odometry): #Store latest linear and angular velocity from /odom
+    def odom_callback(self, msg: Odometry):
+        """Store latest velocity and update EKF with encoder measurements (mode 2 only)"""
         self.last_v = msg.twist.twist.linear.x
         self.last_omega = msg.twist.twist.angular.z
+        
+        # Mode 2: Also update EKF with encoder measurements
+        if len(self.ekf.mu) == 5:
+            v_meas = msg.twist.twist.linear.x
+            w_meas = msg.twist.twist.angular.z
+            z = np.array([v_meas, w_meas])
 
-    def prediction_callback(self): #EKF prediction step, called at fixed rate
+            def hx_enc(x, y, th, v, w):
+                return np.array([v, w])
+
+            def H_enc(x, y, th, v, w):
+                return np.array([
+                    [0.0, 0.0, 0.0, 1.0, 0.0],
+                    [0.0, 0.0, 0.0, 0.0, 1.0],])
+
+            self.ekf.update(
+                z=z,
+                eval_hx=hx_enc,
+                eval_Ht=H_enc,
+                Qt=self.Qt_encoder,
+                hx_args=tuple(self.ekf.mu),
+                Ht_args=tuple(self.ekf.mu))
+            self._publish_state()
+
+    def imu_callback(self, msg: Imu):
+        """Update with IMU angular velocity (mode 2 only)"""
+        if len(self.ekf.mu) != 5:
+            return  # Only applies to Task 2 mode
+        
+        w_meas = msg.angular_velocity.z
+        z = np.array([w_meas])
+
+        def hx_imu(x, y, th, v, w):
+            return np.array([w])
+
+        def H_imu(x, y, th, v, w):
+            return np.array([[0.0, 0.0, 0.0, 0.0, 1.0]])
+
+        self.ekf.update(
+            z=z,
+            eval_hx=hx_imu,
+            eval_Ht=H_imu,
+            Qt=self.Qt_imu,
+            hx_args=tuple(self.ekf.mu),
+            Ht_args=tuple(self.ekf.mu))
+        self._publish_state()
+
+    def prediction_callback(self):
+        """EKF prediction step, called at fixed rate"""
         now = self.get_clock().now()
         dt = (now - self.last_prediction_time).nanoseconds * 1e-9
         if dt <= 0.0:
             dt = 1.0 / self.prediction_rate  # fallback
         self.last_prediction_time = now
 
-        u = np.array([self.last_v, self.last_omega])
+        # Different control inputs based on mode
+        if len(self.ekf.mu) == 3:
+            # Mode 1: control-driven model
+            u = np.array([self.last_v, self.last_omega])
+        else:
+            # Mode 2: constant velocity model (no real control)
+            u = np.array([0.0, 0.0])
 
         # EKF prediction
         self.ekf.predict(u=u, sigma_u=np.array([self.sigma_v, self.sigma_omega]), g_extra_args=(dt,))
@@ -156,7 +213,8 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
                     f'σθ={np.degrees(np.sqrt(self.ekf.Sigma[2, 2])):.1f}°')
         self._publish_state()
 
-    def landmark_callback(self, msg: LandmarkArray): # EKF update for each landmark measurement
+    def landmark_callback(self, msg: LandmarkArray):
+        """EKF update for each landmark measurement"""
         if not msg.landmarks:
             return
 
@@ -222,7 +280,8 @@ class Task_3(Node): #Node for EKF-based robot localization using landmarks
         self._publish_state()
 
     # PUBLISHING 
-    def _publish_state(self): #Publish EKF state as Odometry on /ekf
+    def _publish_state(self):
+        """Publish EKF state as Odometry on /ekf"""
         msg = Odometry()
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = 'odom'
