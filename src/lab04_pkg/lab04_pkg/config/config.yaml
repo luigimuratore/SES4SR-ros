@@ -1,0 +1,17 @@
+task_1:
+  ros__parameters:
+    # Prediction rate (Hz)
+    prediction_rate: 20.0
+    
+    # Initial pose
+    initial_x: -2.5
+    initial_y: 0.0
+    initial_theta: 0.0
+    
+    # Process noise (motion model uncertainty)
+    process_noise_v: 0.1        # Linear velocity noise (m/s)
+    process_noise_omega: 0.05   # Angular velocity noise (rad/s)
+    
+    # Measurement noise (sensor uncertainty)
+    measurement_noise_range: 0.1     # Range measurement noise (m)
+    measurement_noise_bearing: 0.05  # Bearing measurement noise (rad)
