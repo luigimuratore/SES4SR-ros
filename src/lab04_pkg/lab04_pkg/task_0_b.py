@@ -59,8 +59,8 @@ def main():
     # sigma[0][1] => range uncertainty (in meters) and bearing uncertainty (in radians)
     
     #sigma = np.array([0.3, math.pi/24])  # 0.3m, 7.5° -> Medium uncertainty
-    # sigma = np.array([0.05, math.pi/64])  # Low uncertainty: 0.05m, 2.8°
-    sigma = np.array([1, math.pi/6])   # high uncertainty: 1m, 30°
+    sigma = np.array([0.05, math.pi/64])  # Low uncertainty: 0.05m, 2.8°
+    #sigma = np.array([1, math.pi/6])   # high uncertainty: 1m, 30°
 
     # compute measurements and associated probability
     z = []
@@ -75,25 +75,27 @@ def main():
             p_i = landmark_model_prob(z_i, landmarks[i], robot_pose, max_range, fov, sigma)
             p.append(p_i)
 
-    print("Probability density value:", p)
+    print("Probability density value:", p)    
+    
     # Plot landmarks, robot pose with sensor FOV, and detected landmarks with associated probability
     plot_landmarks(landmarks, robot_pose, z, p, fov=fov)
+
 
     #Sampling poses from landmark model
     if len(z) == 0:
         print("No landmarks detected!")
         return
-    
-    # consider only the first landmark detected
+
+    # Use the first landmark and its ALREADY COMPUTED measurement
     landmark = landmarks[0]
-    z = landmark_range_bearing_sensor(robot_pose, landmark, sigma)
+    z_measurement = z[0]  # Use the measurement from the loop, don't recompute!
 
     print(f"\n{'='*60}")
     print(f"TASK: Sampling poses from landmark model")
     print(f"{'='*60}")
     print(f"Robot pose: x={robot_pose[0]:.2f}, y={robot_pose[1]:.2f}, theta={math.degrees(robot_pose[2]):.2f}°")
     print(f"Landmark position: x={landmark[0]:.2f}, y={landmark[1]:.2f}")
-    print(f"Measurement: range={z[0]:.2f}m, bearing={math.degrees(z[1]):.2f}°")
+    print(f"Measurement: range={z_measurement[0]:.2f}m, bearing={math.degrees(z_measurement[1]):.2f}°")
     
     # Compute and display Jacobian
     print(f"\n{'='*60}")
@@ -106,7 +108,9 @@ def main():
 
     # plot landmark
     plt.plot(landmark[0], landmark[1], "sk", ms=10, label='Landmark')
-    plot_sampled_poses(robot_pose, z, landmark, sigma)
+    
+    # CHANGE 1000 SAMPLES IN THE LOOP (original is 500)
+    plot_sampled_poses(robot_pose, z_measurement, landmark, sigma)
     
     plt.close('all')
 
