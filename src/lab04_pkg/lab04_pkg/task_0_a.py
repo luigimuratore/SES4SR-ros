@@ -91,7 +91,7 @@ def main():
     rotated_marker._transform = rotated_marker.get_transform().rotate_deg(degrees(x[2])-90)
     plt.scatter(x[0], x[1], marker=rotated_marker, s=100, facecolors='none', edgecolors='b')
 
-    for x_ in x_prime[:200]:
+    for x_ in x_prime[:500]:
         rotated_marker = mpl.markers.MarkerStyle(marker=arrow)
         rotated_marker._transform = rotated_marker.get_transform().rotate_deg(degrees(x_[2])-90)
         plt.scatter(x_[0], x_[1], marker=rotated_marker, s=40, facecolors='none', edgecolors='r')
@@ -114,6 +114,7 @@ if __name__ == "__main__":
  [2.36011701 4.05442636 0.3       ]
  [2.33664203 4.05087847 0.3       ]
  [2.41955889 4.06341012 0.3       ]]
+
 Jacobian w.r.t state Gt:
 ⎡        v⋅cos(θ)   v⋅cos(dt⋅w + θ)⎤
 ⎢1  0  - ──────── + ───────────────⎥
